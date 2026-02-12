@@ -1,0 +1,3 @@
+[submodule "bert-emotion"]
+	path = bert-emotion
+	url = https://huggingface.co/boltuix/bert-emotion
