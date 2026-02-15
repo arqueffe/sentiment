@@ -3,11 +3,6 @@ name: Play Private Release
 on:
   workflow_dispatch:
     inputs:
-      package_name:
-        description: Android application ID / package name
-        required: true
-        default: com.example.sentiment
-        type: string
       bump_part:
         description: Version part to bump before building
         required: true
@@ -18,16 +13,6 @@ on:
           - minor
           - patch
           - build
-      track:
-        description: Google Play track
-        required: true
-        default: internal
-        type: choice
-        options:
-          - internal
-          - alpha
-          - beta
-          - production
 
 permissions:
   contents: write
@@ -112,11 +97,9 @@ jobs:
       - name: Build app bundle
         run: flutter build appbundle --release
 
-      - name: Upload to Google Play
-        uses: r0adkll/upload-google-play@v1
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
         with:
-          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: ${{ inputs.package_name }}
-          releaseFiles: build/app/outputs/bundle/release/app-release.aab
-          track: ${{ inputs.track }}
-          status: completed
+          name: sentiment-aab-${{ steps.version.outputs.app_version }}
+          path: build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error

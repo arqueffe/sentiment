@@ -85,7 +85,7 @@ Two manual workflows are included:
 	- Bumps version automatically
 	- Commits updated `pubspec.yaml`
 	- Builds signed Android App Bundle (`.aab`)
-	- Uploads to Google Play (internal/alpha/beta/production track)
+	- Uploads `.aab` as a workflow artifact for manual Play Console upload
 
 - `.github/workflows/github-public-split-abi-release.yml`
 	- Bumps version automatically
@@ -101,7 +101,6 @@ Set these in GitHub repository settings (`Settings` -> `Secrets and variables` -
 - `ANDROID_KEYSTORE_PASSWORD`: keystore password
 - `ANDROID_KEY_ALIAS`: key alias
 - `ANDROID_KEY_PASSWORD`: key password
-- `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`: full JSON for Play Console service account (only needed for Play workflow)
 
 ### Local signing file format
 
