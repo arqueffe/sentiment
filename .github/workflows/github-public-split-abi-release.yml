@@ -37,7 +37,8 @@ jobs:
       - name: Pull LFS objects in submodules
         run: |
           git lfs install
-          git lfs pull --recurse-submodules
+          git lfs pull
+          git submodule foreach --recursive 'git lfs pull'
 
       - name: Setup Java
         uses: actions/setup-java@v4
