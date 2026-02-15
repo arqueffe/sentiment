@@ -53,6 +53,11 @@ jobs:
         with:
           channel: stable
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Bump version
         run: dart run tools/bump_version.dart --part ${{ inputs.bump_part }}
 
@@ -89,6 +94,12 @@ jobs:
 
       - name: Flutter pub get
         run: flutter pub get
+
+      - name: Install ONNX export dependencies
+        run: python -m pip install -r tools/requirements-onnx-export.txt
+
+      - name: Export BERT model to ONNX
+        run: python tools/export_bert_emotion_to_onnx.py --model-dir bert-emotion --output assets/models/bert-emotion.onnx --check
 
       - name: Build app bundle
         run: flutter build appbundle --release
