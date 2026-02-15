@@ -70,11 +70,36 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
 
             final pre = entry.preMoodSelection?.primaryId;
             final post = entry.postMoodSelection?.primaryId;
+            final detectedCounts = <String, int>{};
+            for (final annotation in entry.sentenceEmotionAnnotations) {
+              final detected = annotation.primaryEmotionId;
+              if (detected == null) {
+                continue;
+              }
+              detectedCounts.update(
+                detected,
+                (value) => value + 1,
+                ifAbsent: () => 1,
+              );
+              moodCounts[detected] = (moodCounts[detected] ?? 0) + 1;
+              totalMoodSamples += 1;
+            }
+
+            String? dominantDetected;
+            var dominantDetectedCount = 0;
+            for (final detectedEntry in detectedCounts.entries) {
+              if (detectedEntry.value > dominantDetectedCount) {
+                dominantDetected = detectedEntry.key;
+                dominantDetectedCount = detectedEntry.value;
+              }
+            }
 
             if (post != null) {
               dayDominantMood[day] = post;
             } else if (pre != null) {
               dayDominantMood.putIfAbsent(day, () => pre);
+            } else if (dominantDetected != null) {
+              dayDominantMood.putIfAbsent(day, () => dominantDetected!);
             }
 
             if (pre != null) {
@@ -310,8 +335,9 @@ class _PiePainter extends CustomPainter {
     }
 
     final holePaint = Paint()
-      ..color = Colors.black.withOpacity(
-        ThemeData.estimateBrightnessForColor(slices.first.color) ==
+      ..color = Colors.black.withValues(
+        alpha:
+            ThemeData.estimateBrightnessForColor(slices.first.color) ==
                 Brightness.dark
             ? 0.28
             : 0.08,
@@ -401,7 +427,7 @@ class _MoodRow extends StatelessWidget {
             value: ratio,
             minHeight: 7,
             valueColor: AlwaysStoppedAnimation<Color>(color),
-            backgroundColor: color.withOpacity(0.15),
+            backgroundColor: color.withValues(alpha: 0.15),
           ),
         ),
       ],
@@ -455,11 +481,13 @@ class _RhythmChart extends StatelessWidget {
                 height: height,
                 decoration: BoxDecoration(
                   color: point.count == 0
-                      ? Theme.of(context).colorScheme.outline.withOpacity(0.15)
+                      ? Theme.of(
+                          context,
+                        ).colorScheme.outline.withValues(alpha: 0.15)
                       : emotionColor(
                           context,
                           point.primaryId ?? EmotionCatalog.wheel.first.id,
-                        ).withOpacity(0.75),
+                        ).withValues(alpha: 0.75),
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),

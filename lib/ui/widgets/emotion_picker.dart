@@ -63,7 +63,6 @@ class _EmotionPickerSheetState extends State<EmotionPickerSheet>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 320),
-      lowerBound: 0,
       upperBound: 2,
       value: 0,
     );
@@ -517,7 +516,7 @@ class _EmotionWheelPainter extends CustomPainter {
       final node = nodes[index];
       final baseColor = colorFor(node, index);
       final mutedBlend = Color.alphaBlend(
-        Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.60),
+        Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.60),
         baseColor,
       );
       final color = (muted ? mutedBlend : baseColor).withOpacity(opacity);

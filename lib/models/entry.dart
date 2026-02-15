@@ -23,6 +23,78 @@ class EmotionSelectionHive extends HiveObject {
   }
 }
 
+class SentenceEmotionAnnotation {
+  const SentenceEmotionAnnotation({
+    required this.start,
+    required this.end,
+    required this.sentence,
+    required this.modelLabel,
+    required this.confidence,
+    this.primaryEmotionId,
+  });
+
+  final int start;
+  final int end;
+  final String sentence;
+  final String modelLabel;
+  final String? primaryEmotionId;
+  final double confidence;
+}
+
+@HiveType(typeId: 3)
+class SentenceEmotionAnnotationHive extends HiveObject {
+  SentenceEmotionAnnotationHive({
+    required this.start,
+    required this.end,
+    required this.sentence,
+    required this.modelLabel,
+    required this.confidence,
+    this.primaryEmotionId,
+  });
+
+  @HiveField(0)
+  final int start;
+
+  @HiveField(1)
+  final int end;
+
+  @HiveField(2)
+  final String sentence;
+
+  @HiveField(3)
+  final String modelLabel;
+
+  @HiveField(4)
+  final String? primaryEmotionId;
+
+  @HiveField(5)
+  final double confidence;
+
+  SentenceEmotionAnnotation toDomain() {
+    return SentenceEmotionAnnotation(
+      start: start,
+      end: end,
+      sentence: sentence,
+      modelLabel: modelLabel,
+      primaryEmotionId: primaryEmotionId,
+      confidence: confidence,
+    );
+  }
+
+  static SentenceEmotionAnnotationHive fromDomain(
+    SentenceEmotionAnnotation annotation,
+  ) {
+    return SentenceEmotionAnnotationHive(
+      start: annotation.start,
+      end: annotation.end,
+      sentence: annotation.sentence,
+      modelLabel: annotation.modelLabel,
+      primaryEmotionId: annotation.primaryEmotionId,
+      confidence: annotation.confidence,
+    );
+  }
+}
+
 @HiveType(typeId: 2)
 class JournalEntry extends HiveObject {
   JournalEntry({
@@ -31,6 +103,7 @@ class JournalEntry extends HiveObject {
     required this.createdAt,
     this.preMood,
     this.postMood,
+    this.sentenceAnnotations = const [],
   });
 
   @HiveField(0)
@@ -48,14 +121,23 @@ class JournalEntry extends HiveObject {
   @HiveField(4)
   final EmotionSelectionHive? postMood;
 
+  @HiveField(5)
+  final List<SentenceEmotionAnnotationHive> sentenceAnnotations;
+
   EmotionSelection? get preMoodSelection => preMood?.toDomain();
   EmotionSelection? get postMoodSelection => postMood?.toDomain();
+  List<SentenceEmotionAnnotation> get sentenceEmotionAnnotations {
+    return sentenceAnnotations
+        .map((annotation) => annotation.toDomain())
+        .toList();
+  }
 
   JournalEntry copyWith({
     String? body,
     DateTime? createdAt,
     EmotionSelection? preMood,
     EmotionSelection? postMood,
+    List<SentenceEmotionAnnotation>? sentenceAnnotations,
   }) {
     return JournalEntry(
       id: id,
@@ -67,6 +149,11 @@ class JournalEntry extends HiveObject {
       postMood: postMood == null
           ? this.postMood
           : EmotionSelectionHive.fromDomain(postMood),
+      sentenceAnnotations: sentenceAnnotations == null
+          ? this.sentenceAnnotations
+          : sentenceAnnotations
+                .map(SentenceEmotionAnnotationHive.fromDomain)
+                .toList(),
     );
   }
 
@@ -77,6 +164,9 @@ class JournalEntry extends HiveObject {
       'createdAt': createdAt.toIso8601String(),
       'preMood': _moodToJson(preMoodSelection),
       'postMood': _moodToJson(postMoodSelection),
+      'sentenceAnnotations': sentenceEmotionAnnotations
+          .map(_annotationToJson)
+          .toList(),
     };
   }
 
@@ -87,6 +177,10 @@ class JournalEntry extends HiveObject {
       createdAt: DateTime.parse(json['createdAt'] as String),
       preMood: _moodFromJson(json['preMood'] as Map<String, dynamic>?),
       postMood: _moodFromJson(json['postMood'] as Map<String, dynamic>?),
+      sentenceAnnotations:
+          (json['sentenceAnnotations'] as List<dynamic>? ?? const [])
+              .map((item) => _annotationFromJson(item as Map<String, dynamic>))
+              .toList(),
     );
   }
 
@@ -104,6 +198,32 @@ class JournalEntry extends HiveObject {
     return EmotionSelectionHive(
       primaryId: json['primaryId'] as String,
       secondaryId: json['secondaryId'] as String?,
+    );
+  }
+
+  static Map<String, dynamic> _annotationToJson(
+    SentenceEmotionAnnotation annotation,
+  ) {
+    return {
+      'start': annotation.start,
+      'end': annotation.end,
+      'sentence': annotation.sentence,
+      'modelLabel': annotation.modelLabel,
+      'primaryEmotionId': annotation.primaryEmotionId,
+      'confidence': annotation.confidence,
+    };
+  }
+
+  static SentenceEmotionAnnotationHive _annotationFromJson(
+    Map<String, dynamic> json,
+  ) {
+    return SentenceEmotionAnnotationHive(
+      start: json['start'] as int,
+      end: json['end'] as int,
+      sentence: json['sentence'] as String,
+      modelLabel: json['modelLabel'] as String,
+      primaryEmotionId: json['primaryEmotionId'] as String?,
+      confidence: (json['confidence'] as num).toDouble(),
     );
   }
 }
@@ -144,12 +264,22 @@ class JournalEntryAdapter extends TypeAdapter<JournalEntry> {
     final postMood = reader.readBool()
         ? reader.read() as EmotionSelectionHive
         : null;
+    final hasAnnotations = _tryRead(reader, reader.readBool) ?? false;
+    final sentenceAnnotations = hasAnnotations
+        ? (_tryRead(
+                reader,
+                () => (reader.read() as List)
+                    .cast<SentenceEmotionAnnotationHive>(),
+              ) ??
+              const <SentenceEmotionAnnotationHive>[])
+        : const <SentenceEmotionAnnotationHive>[];
     return JournalEntry(
       id: id,
       body: body,
       createdAt: createdAt,
       preMood: preMood,
       postMood: postMood,
+      sentenceAnnotations: sentenceAnnotations,
     );
   }
 
@@ -166,5 +296,54 @@ class JournalEntryAdapter extends TypeAdapter<JournalEntry> {
     if (obj.postMood != null) {
       writer.write(obj.postMood!);
     }
+    writer.writeBool(obj.sentenceAnnotations.isNotEmpty);
+    if (obj.sentenceAnnotations.isNotEmpty) {
+      writer.write(obj.sentenceAnnotations);
+    }
+  }
+
+  T? _tryRead<T>(BinaryReader reader, T Function() fn) {
+    try {
+      return fn();
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+class SentenceEmotionAnnotationAdapter
+    extends TypeAdapter<SentenceEmotionAnnotationHive> {
+  @override
+  final int typeId = 3;
+
+  @override
+  SentenceEmotionAnnotationHive read(BinaryReader reader) {
+    final start = reader.readInt();
+    final end = reader.readInt();
+    final sentence = reader.readString();
+    final modelLabel = reader.readString();
+    final primaryEmotionId = reader.readBool() ? reader.readString() : null;
+    final confidence = reader.readDouble();
+    return SentenceEmotionAnnotationHive(
+      start: start,
+      end: end,
+      sentence: sentence,
+      modelLabel: modelLabel,
+      primaryEmotionId: primaryEmotionId,
+      confidence: confidence,
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, SentenceEmotionAnnotationHive obj) {
+    writer.writeInt(obj.start);
+    writer.writeInt(obj.end);
+    writer.writeString(obj.sentence);
+    writer.writeString(obj.modelLabel);
+    writer.writeBool(obj.primaryEmotionId != null);
+    if (obj.primaryEmotionId != null) {
+      writer.writeString(obj.primaryEmotionId!);
+    }
+    writer.writeDouble(obj.confidence);
   }
 }

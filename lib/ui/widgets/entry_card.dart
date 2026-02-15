@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:sentiment/models/emotion.dart';
 import 'package:sentiment/models/entry.dart';
 import 'package:sentiment/ui/widgets/mood_chip.dart';
 
@@ -17,6 +18,10 @@ class EntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mainSentenceEmotion = _mainSentenceEmotionSelection(
+      entry.sentenceEmotionAnnotations,
+    );
+
     return InkWell(
       borderRadius: BorderRadius.circular(20),
       onTap: onTap,
@@ -41,7 +46,8 @@ class EntryCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
               if (entry.preMoodSelection != null ||
-                  entry.postMoodSelection != null)
+                  entry.postMoodSelection != null ||
+                  mainSentenceEmotion != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
                   child: Wrap(
@@ -60,6 +66,12 @@ class EntryCard extends StatelessWidget {
                           selection: entry.postMoodSelection,
                           role: 'After',
                         ),
+                      if (mainSentenceEmotion != null)
+                        MoodChip(
+                          label: mainSentenceEmotion.label,
+                          selection: mainSentenceEmotion,
+                          role: 'Detected',
+                        ),
                     ],
                   ),
                 ),
@@ -68,5 +80,36 @@ class EntryCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  EmotionSelection? _mainSentenceEmotionSelection(
+    List<SentenceEmotionAnnotation> annotations,
+  ) {
+    final counts = <String, int>{};
+    for (final annotation in annotations) {
+      final emotionId = annotation.primaryEmotionId;
+      if (emotionId == null) {
+        continue;
+      }
+      counts.update(emotionId, (value) => value + 1, ifAbsent: () => 1);
+    }
+
+    if (counts.isEmpty) {
+      return null;
+    }
+
+    String? dominantId;
+    var dominantCount = 0;
+    for (final entry in counts.entries) {
+      if (entry.value > dominantCount) {
+        dominantId = entry.key;
+        dominantCount = entry.value;
+      }
+    }
+
+    if (dominantId == null) {
+      return null;
+    }
+    return EmotionSelection(primaryId: dominantId);
   }
 }

@@ -7,11 +7,14 @@ import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:sentiment/data/auth_service.dart';
+import 'package:sentiment/data/emotion_inference_service.dart';
+import 'package:sentiment/data/emotion_label_mapper.dart';
 import 'package:sentiment/data/encryption_service.dart';
 import 'package:sentiment/data/entry_repository.dart';
 import 'package:sentiment/data/export_service.dart';
 import 'package:sentiment/state/auth_controller.dart';
 import 'package:sentiment/state/entry_controller.dart';
+import 'package:sentiment/state/sentence_emotion_controller.dart';
 
 final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
   return const FlutterSecureStorage();
@@ -57,6 +60,29 @@ final entryControllerProvider = Provider<EntryController>((ref) {
 final exportServiceProvider = Provider<ExportService>((ref) {
   return ExportService();
 });
+
+final emotionLabelMapperProvider = Provider<EmotionLabelMapper>((ref) {
+  return EmotionLabelMapper();
+});
+
+final emotionInferenceServiceProvider = Provider<EmotionInferenceService>((
+  ref,
+) {
+  return EmotionInferenceService(
+    labelMapper: ref.watch(emotionLabelMapperProvider),
+  );
+});
+
+final sentenceEmotionControllerProvider =
+    StateNotifierProvider.autoDispose<
+      SentenceEmotionController,
+      SentenceEmotionState
+    >((ref) {
+      return SentenceEmotionController(
+        inferenceService: ref.watch(emotionInferenceServiceProvider),
+        labelMapper: ref.watch(emotionLabelMapperProvider),
+      );
+    });
 
 final themeModeProvider = StateNotifierProvider<ThemeModeController, ThemeMode>(
   (ref) {

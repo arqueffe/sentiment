@@ -24,7 +24,7 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          _SectionTitle(label: 'Appearance'),
+          const _SectionTitle(label: 'Appearance'),
           const SizedBox(height: 12),
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
@@ -36,7 +36,7 @@ class SettingsScreen extends ConsumerWidget {
             },
           ),
           const SizedBox(height: 24),
-          _SectionTitle(label: 'Data'),
+          const _SectionTitle(label: 'Data'),
           const SizedBox(height: 12),
           _ActionTile(
             title: 'Export entries',
@@ -86,7 +86,7 @@ class SettingsScreen extends ConsumerWidget {
             },
           ),
           const SizedBox(height: 24),
-          _SectionTitle(label: 'Security'),
+          const _SectionTitle(label: 'Security'),
           const SizedBox(height: 12),
           _ActionTile(
             title: 'Change password',
@@ -156,7 +156,7 @@ class SettingsScreen extends ConsumerWidget {
             },
           ),
           const SizedBox(height: 24),
-          _SectionTitle(label: 'About'),
+          const _SectionTitle(label: 'About'),
           const SizedBox(height: 12),
           FutureBuilder<PackageInfo>(
             future: PackageInfo.fromPlatform(),
@@ -191,7 +191,7 @@ class SettingsScreen extends ConsumerWidget {
             onTap: () => _openUrl(_siteUrl),
           ),
           const SizedBox(height: 24),
-          _SectionTitle(label: 'Licenses'),
+          const _SectionTitle(label: 'Licenses'),
           const SizedBox(height: 12),
           _ActionTile(
             title: 'Sentiment (MIT)',
