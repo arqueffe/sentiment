@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:sentiment/models/emotion.dart';
 import 'package:sentiment/models/entry.dart';
 import 'package:sentiment/state/providers.dart';
+import 'package:sentiment/ui/widgets/annotated_text_controller.dart';
 import 'package:sentiment/ui/widgets/emotion_picker.dart';
 import 'package:sentiment/ui/widgets/mood_chip.dart';
 import 'package:sentiment/ui/widgets/settings_button.dart';
@@ -17,22 +18,45 @@ class EntryEditorScreen extends ConsumerStatefulWidget {
 }
 
 class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
-  final _bodyController = TextEditingController();
+  final _bodyController = AnnotatedTextController();
   final _pageController = PageController();
 
   EmotionSelection? _preMood;
   EmotionSelection? _postMood;
+  String? _hoveredEmotionLabel;
   int _stepIndex = 0;
 
-  static const _titles = ['Feel before', 'Write entry', 'Feel after'];
+  static const _titles = [
+    'Feel before',
+    'Write entry',
+    'Detected emotions',
+    'Feel after',
+  ];
 
   @override
   void initState() {
     super.initState();
-    _bodyController.addListener(_onBodyChanged);
+    _bodyController.onAnnotationHover = _onAnnotationHover;
   }
 
-  void _onBodyChanged() {
+  void _onAnnotationHover(SentenceEmotionAnnotation? annotation) {
+    final primaryEmotionId = annotation?.primaryEmotionId;
+    final nextLabel = primaryEmotionId == null
+        ? null
+        : (EmotionCatalog.byId(primaryEmotionId)?.label ?? primaryEmotionId);
+    if (_hoveredEmotionLabel == nextLabel || !mounted) {
+      return;
+    }
+    setState(() {
+      _hoveredEmotionLabel = nextLabel;
+    });
+  }
+
+  void _onBodyChanged(String value) {
+    ref.read(sentenceEmotionControllerProvider.notifier).setBody(value);
+    if (_hoveredEmotionLabel != null) {
+      _hoveredEmotionLabel = null;
+    }
     if (!mounted) {
       return;
     }
@@ -41,7 +65,6 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
 
   @override
   void dispose() {
-    _bodyController.removeListener(_onBodyChanged);
     _bodyController.dispose();
     _pageController.dispose();
     super.dispose();
@@ -64,7 +87,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   Future<void> _save() async {
     final body = _bodyController.text.trim();
     if (body.isEmpty) {
-      _goToStep(1);
+      await _goToStep(1);
       return;
     }
     final entry = JournalEntry(
@@ -77,6 +100,11 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       postMood: _postMood == null
           ? null
           : EmotionSelectionHive.fromDomain(_postMood!),
+      sentenceAnnotations: ref
+          .read(sentenceEmotionControllerProvider)
+          .annotations
+          .map(SentenceEmotionAnnotationHive.fromDomain)
+          .toList(),
     );
     await ref.read(entryControllerProvider).addEntry(entry);
     if (mounted) {
@@ -99,7 +127,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   }
 
   Future<void> _next() async {
-    if (_stepIndex >= 2) {
+    if (_stepIndex >= 3) {
       await _save();
       return;
     }
@@ -118,6 +146,14 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   Widget build(BuildContext context) {
     final now = DateFormat.yMMMMd().add_Hm().format(DateTime.now());
     final hasText = _bodyController.text.trim().isNotEmpty;
+    final sentenceEmotionState = ref.watch(sentenceEmotionControllerProvider);
+    final annotations = sentenceEmotionState.annotations;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _bodyController.setAnnotations(annotations);
+    });
     final canContinue = _stepIndex == 1 ? hasText : true;
 
     return Scaffold(
@@ -130,7 +166,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
             child: LinearProgressIndicator(
-              value: (_stepIndex + 1) / 3,
+              value: (_stepIndex + 1) / 4,
               borderRadius: BorderRadius.circular(12),
             ),
           ),
@@ -145,7 +181,17 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
                   role: 'Before',
                   onPick: () => _pickMood(isPre: true),
                 ),
-                _WriteStep(bodyController: _bodyController, now: now),
+                _WriteStep(
+                  bodyController: _bodyController,
+                  now: now,
+                  isClassifying: sentenceEmotionState.isClassifying,
+                  hoveredEmotionLabel: _hoveredEmotionLabel,
+                  onChanged: _onBodyChanged,
+                ),
+                _DetectedStatsStep(
+                  counts: sentenceEmotionState.counts,
+                  totalClassified: sentenceEmotionState.annotations.length,
+                ),
                 _MoodStep(
                   prompt: 'How do you feel after writing?',
                   value: _postMood,
@@ -176,7 +222,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
                 const Spacer(),
                 FilledButton(
                   onPressed: canContinue ? _next : null,
-                  child: Text(_stepIndex == 2 ? 'Save' : 'Next'),
+                  child: Text(_stepIndex == 3 ? 'Save' : 'Next'),
                 ),
               ],
             ),
@@ -236,10 +282,19 @@ class _MoodStep extends StatelessWidget {
 }
 
 class _WriteStep extends StatelessWidget {
-  const _WriteStep({required this.bodyController, required this.now});
+  const _WriteStep({
+    required this.bodyController,
+    required this.now,
+    required this.isClassifying,
+    required this.hoveredEmotionLabel,
+    required this.onChanged,
+  });
 
-  final TextEditingController bodyController;
+  final AnnotatedTextController bodyController;
   final String now;
+  final bool isClassifying;
+  final String? hoveredEmotionLabel;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -250,12 +305,73 @@ class _WriteStep extends StatelessWidget {
         const SizedBox(height: 14),
         TextField(
           controller: bodyController,
+          onChanged: onChanged,
           maxLines: 14,
           autofocus: true,
           decoration: const InputDecoration(
             hintText: 'Write freely...\nNothing leaves your device.',
           ),
         ),
+        const SizedBox(height: 8),
+        Text(
+          isClassifying
+              ? 'Detecting emotion for completed sentences...'
+              : 'Completed sentences are underlined by detected emotion.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        if (hoveredEmotionLabel != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Hovered sentence emotion: $hoveredEmotionLabel',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _DetectedStatsStep extends StatelessWidget {
+  const _DetectedStatsStep({
+    required this.counts,
+    required this.totalClassified,
+  });
+
+  final Map<String, int> counts;
+  final int totalClassified;
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Text(
+          'Detected emotions',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          totalClassified == 0
+              ? 'No completed sentences detected yet.'
+              : '$totalClassified completed sentences were classified.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 16),
+        if (entries.isEmpty)
+          Text(
+            'Finish at least one sentence with punctuation to see emotion stats.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        for (final item in entries)
+          Card(
+            child: ListTile(
+              title: Text(EmotionCatalog.byId(item.key)?.label ?? item.key),
+              trailing: Text(item.value.toString()),
+            ),
+          ),
       ],
     );
   }

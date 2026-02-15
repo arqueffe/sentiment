@@ -63,7 +63,6 @@ class _EmotionPickerSheetState extends State<EmotionPickerSheet>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 320),
-      lowerBound: 0,
       upperBound: 2,
       value: 0,
     );
@@ -517,17 +516,21 @@ class _EmotionWheelPainter extends CustomPainter {
       final node = nodes[index];
       final baseColor = colorFor(node, index);
       final mutedBlend = Color.alphaBlend(
-        Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.60),
+        Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.60),
         baseColor,
       );
-      final color = (muted ? mutedBlend : baseColor).withOpacity(opacity);
+      final color = (muted ? mutedBlend : baseColor).withValues(alpha: opacity);
       final isSelected = node.id == selectedId;
       final isHovered = node.id == hoveredId;
 
       final paint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = isHovered ? strokeWidth + 3 : strokeWidth
-        ..color = (isSelected || isHovered) ? color : color.withOpacity(0.82)
+        ..color = (isSelected || isHovered)
+            ? color
+            : color.withValues(alpha: 0.82)
         ..maskFilter = (isSelected || isHovered)
             ? const MaskFilter.blur(BlurStyle.normal, 2)
             : null;
@@ -550,7 +553,9 @@ class _EmotionWheelPainter extends CustomPainter {
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
               fontWeight: FontWeight.w600,
               color: muted
-                  ? Theme.of(context).colorScheme.onSurface.withOpacity(0.82)
+                  ? Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.82)
                   : Theme.of(context).colorScheme.onPrimary,
             ),
           ),

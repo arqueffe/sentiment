@@ -42,6 +42,7 @@ class _EntryListScreenState extends ConsumerState<EntryListScreen> {
   @override
   Widget build(BuildContext context) {
     final entries = ref.watch(entriesProvider);
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -70,57 +71,101 @@ class _EntryListScreenState extends ConsumerState<EntryListScreen> {
 
           if (filtered.isEmpty) {
             return Center(
-              child: Text(
-                _selectedDay == null
-                    ? 'No entries yet'
-                    : 'No entries on this day',
-                style: Theme.of(context).textTheme.titleMedium,
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.auto_stories_outlined,
+                      size: 44,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _selectedDay == null
+                          ? 'No entries yet'
+                          : 'No entries on this day',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ],
+                ),
               ),
             );
           }
-          return ListView.separated(
-            padding: const EdgeInsets.all(20),
-            itemBuilder: (context, index) {
-              final entry = filtered[index];
-              return EntryCard(
-                entry: entry,
-                dateLabel: DateFormat.yMMMd().format(entry.createdAt),
-                onTap: () => Navigator.of(
-                  context,
-                ).pushNamed(AppRouter.entryDetail, arguments: entry),
-              );
-            },
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemCount: filtered.length,
+          final title = _selectedDay == null
+              ? 'All entries'
+              : DateFormat.yMMMMd().format(_selectedDay!);
+          final countLabel =
+              '${filtered.length} ${filtered.length == 1 ? 'entry' : 'entries'}';
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainer,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              countLabel,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_selectedDay != null)
+                        TextButton.icon(
+                          onPressed: _clearDate,
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          label: const Text('Clear'),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                  itemBuilder: (context, index) {
+                    final entry = filtered[index];
+                    return EntryCard(
+                      entry: entry,
+                      dateLabel: DateFormat.yMMMd().format(entry.createdAt),
+                      onTap: () => Navigator.of(
+                        context,
+                      ).pushNamed(AppRouter.entryDetail, arguments: entry),
+                    );
+                  },
+                  separatorBuilder: (_, index) => const SizedBox(height: 12),
+                  itemCount: filtered.length,
+                ),
+              ),
+            ],
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(child: Text(error.toString())),
       ),
-      bottomSheet: _selectedDay == null
-          ? null
-          : Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                border: Border(
-                  top: BorderSide(
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      DateFormat.yMMMMd().format(_selectedDay!),
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ),
-                  TextButton(onPressed: _clearDate, child: const Text('Clear')),
-                ],
-              ),
-            ),
     );
   }
 }

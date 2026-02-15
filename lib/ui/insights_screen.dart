@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:sentiment/models/emotion.dart';
 import 'package:sentiment/models/entry.dart';
 import 'package:sentiment/state/providers.dart';
+import 'package:sentiment/ui/insights/insights_metrics.dart';
 import 'package:sentiment/ui/widgets/emotion_color.dart';
 import 'package:sentiment/ui/widgets/settings_button.dart';
 
@@ -43,62 +44,74 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
       body: entries.when(
         data: (items) {
           final filteredItems = _applyWindow(items, _window);
+          final colorScheme = Theme.of(context).colorScheme;
+          final textTheme = Theme.of(context).textTheme;
 
           if (filteredItems.isEmpty) {
             return Center(
-              child: Text(
-                'No data in this time window',
-                style: Theme.of(context).textTheme.titleMedium,
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.insights_outlined,
+                      size: 44,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No data in this time window',
+                      style: textTheme.titleMedium,
+                    ),
+                  ],
+                ),
               ),
             );
           }
 
-          final moodCounts = <String, int>{};
-          final dayCounts = <DateTime, int>{};
-          final dayDominantMood = <DateTime, String>{};
-          int preCount = 0;
-          int postCount = 0;
-          var totalMoodSamples = 0;
-
-          for (final entry in filteredItems) {
-            final day = DateTime(
-              entry.createdAt.year,
-              entry.createdAt.month,
-              entry.createdAt.day,
-            );
-            dayCounts[day] = (dayCounts[day] ?? 0) + 1;
-
-            final pre = entry.preMoodSelection?.primaryId;
-            final post = entry.postMoodSelection?.primaryId;
-
-            if (post != null) {
-              dayDominantMood[day] = post;
-            } else if (pre != null) {
-              dayDominantMood.putIfAbsent(day, () => pre);
-            }
-
-            if (pre != null) {
-              moodCounts[pre] = (moodCounts[pre] ?? 0) + 1;
-              preCount += 1;
-              totalMoodSamples += 1;
-            }
-            if (post != null) {
-              moodCounts[post] = (moodCounts[post] ?? 0) + 1;
-              postCount += 1;
-              totalMoodSamples += 1;
-            }
-          }
-
-          final moodSorted = moodCounts.entries.toList()
-            ..sort((a, b) => b.value.compareTo(a.value));
-
-          final dailySeries = _lastNDays(dayCounts, dayDominantMood, 14);
+          final metrics = buildInsightsMetrics(filteredItems);
+          final uniqueDays = filteredItems
+              .map(
+                (entry) => DateTime(
+                  entry.createdAt.year,
+                  entry.createdAt.month,
+                  entry.createdAt.day,
+                ),
+              )
+              .toSet();
+          final sortedByDate = [...filteredItems]
+            ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          final windowRange = sortedByDate.isEmpty
+              ? ''
+              : '${DateFormat.MMMd().format(sortedByDate.first.createdAt)} - ${DateFormat.MMMd().format(sortedByDate.last.createdAt)}';
+          final streak = _currentEntryStreak(filteredItems);
+          final topMoodEntry = metrics.moodSorted.isEmpty
+              ? null
+              : metrics.moodSorted.first;
+          final topMoodLabel = topMoodEntry == null
+              ? '—'
+              : (EmotionCatalog.byId(topMoodEntry.key)?.label ??
+                    topMoodEntry.key);
+          final topMoodShare =
+              topMoodEntry == null || metrics.totalMoodSamples == 0
+              ? 0
+              : ((topMoodEntry.value / metrics.totalMoodSamples) * 100).round();
+          final consistency =
+              ((metrics.preCount + metrics.postCount) /
+                      (filteredItems.length * 2) *
+                      100)
+                  .round();
+          final busiestWeekday = _busiestWeekday(filteredItems);
+          final avgEntries =
+              (filteredItems.length / uniqueDays.length.clamp(1, 100000))
+                  .toStringAsFixed(1);
 
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              Text('Highlights', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 12),
+              Text('Highlights', style: textTheme.titleLarge),
+              const SizedBox(height: 10),
               _WindowSelector(
                 selected: _window,
                 onSelected: (window) {
@@ -108,49 +121,131 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
                 },
               ),
               const SizedBox(height: 12),
-              _StatRow(
-                label: 'Pre check-ins',
-                value: _percent(preCount, filteredItems.length),
-              ),
-              _StatRow(
-                label: 'Post check-ins',
-                value: _percent(postCount, filteredItems.length),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Mood rhythm',
-                style: Theme.of(context).textTheme.titleLarge,
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Overview', style: textTheme.titleMedium),
+                      const SizedBox(height: 10),
+                      Text(
+                        windowRange,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          _KpiTile(
+                            icon: Icons.menu_book_outlined,
+                            label: 'Entries',
+                            value: '${filteredItems.length}',
+                          ),
+                          _KpiTile(
+                            icon: Icons.calendar_month_outlined,
+                            label: 'Active days',
+                            value: '${uniqueDays.length}',
+                          ),
+                          _KpiTile(
+                            icon: Icons.local_fire_department_outlined,
+                            label: 'Streak',
+                            value: '$streak d',
+                          ),
+                          _KpiTile(
+                            icon: Icons.stacked_line_chart_outlined,
+                            label: 'Avg/day',
+                            value: avgEntries,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
-              _RhythmChart(series: dailySeries),
-              const SizedBox(height: 8),
-              Text(
-                '${DateFormat.MMMd().format(dailySeries.first.day)} - ${DateFormat.MMMd().format(dailySeries.last.day)}',
-                style: Theme.of(context).textTheme.labelLarge,
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Smart insights', style: textTheme.titleMedium),
+                      const SizedBox(height: 12),
+                      _InsightLine(
+                        icon: Icons.psychology_alt_outlined,
+                        text: topMoodEntry == null
+                            ? 'No dominant mood yet.'
+                            : 'Dominant mood is $topMoodLabel at $topMoodShare% of all mood signals.',
+                      ),
+                      const SizedBox(height: 10),
+                      _InsightLine(
+                        icon: Icons.fact_check_outlined,
+                        text:
+                            'Check-in consistency is $consistency% (${percentString(metrics.preCount, filteredItems.length)} pre, ${percentString(metrics.postCount, filteredItems.length)} post).',
+                      ),
+                      const SizedBox(height: 10),
+                      _InsightLine(
+                        icon: Icons.today_outlined,
+                        text: busiestWeekday == null
+                            ? 'Not enough data for weekday patterns yet.'
+                            : 'Most active day is $busiestWeekday.',
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 24),
-              Text(
-                'Mood balance',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 16),
-              _MoodPie(
-                slices: moodSorted
-                    .map(
-                      (entry) => _PieSlice(
-                        label:
-                            EmotionCatalog.byId(entry.key)?.label ?? entry.key,
-                        value: entry.value,
-                        color: emotionColor(context, entry.key),
+              Text('Mood rhythm', style: textTheme.titleLarge),
+              const SizedBox(height: 12),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _RhythmChart(series: metrics.dailySeries),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${DateFormat.MMMd().format(metrics.dailySeries.first.day)} - ${DateFormat.MMMd().format(metrics.dailySeries.last.day)}',
+                        style: textTheme.labelLarge?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
-                    )
-                    .toList(),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text('Mood balance', style: textTheme.titleLarge),
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: _MoodPie(
+                    slices: metrics.moodSorted
+                        .map(
+                          (entry) => _PieSlice(
+                            label:
+                                EmotionCatalog.byId(entry.key)?.label ??
+                                entry.key,
+                            value: entry.value,
+                            color: emotionColor(context, entry.key),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
               ),
               const SizedBox(height: 14),
-              ...moodSorted.take(6).map((entry) {
+              ...metrics.moodSorted.take(6).map((entry) {
                 final label =
                     EmotionCatalog.byId(entry.key)?.label ?? entry.key;
-                final ratio = entry.value / totalMoodSamples.clamp(1, 1000000);
+                final ratio =
+                    entry.value / metrics.totalMoodSamples.clamp(1, 1000000);
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _MoodRow(
@@ -182,6 +277,56 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
     final cutoff = now.subtract(Duration(days: window.days! - 1));
     return items.where((entry) => entry.createdAt.isAfter(cutoff)).toList();
   }
+
+  int _currentEntryStreak(List<JournalEntry> items) {
+    if (items.isEmpty) {
+      return 0;
+    }
+
+    final days = items
+        .map(
+          (entry) => DateTime(
+            entry.createdAt.year,
+            entry.createdAt.month,
+            entry.createdAt.day,
+          ),
+        )
+        .toSet();
+
+    final today = DateTime.now();
+    var cursor = DateTime(today.year, today.month, today.day);
+    var streak = 0;
+
+    while (days.contains(cursor)) {
+      streak += 1;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+
+    return streak;
+  }
+
+  String? _busiestWeekday(List<JournalEntry> items) {
+    if (items.isEmpty) {
+      return null;
+    }
+
+    final counts = <int, int>{};
+    for (final entry in items) {
+      counts.update(
+        entry.createdAt.weekday,
+        (value) => value + 1,
+        ifAbsent: () => 1,
+      );
+    }
+
+    final sorted = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    if (sorted.isEmpty) {
+      return null;
+    }
+
+    return DateFormat.EEEE().format(DateTime(2024, 1, sorted.first.key));
+  }
 }
 
 class _WindowSelector extends StatelessWidget {
@@ -192,17 +337,92 @@ class _WindowSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      children: _InsightsWindow.values
+    return SegmentedButton<_InsightsWindow>(
+      showSelectedIcon: false,
+      segments: _InsightsWindow.values
           .map(
-            (window) => ChoiceChip(
+            (window) => ButtonSegment<_InsightsWindow>(
+              value: window,
               label: Text(window.label),
-              selected: selected == window,
-              onSelected: (_) => onSelected(window),
             ),
           )
           .toList(),
+      selected: <_InsightsWindow>{selected},
+      onSelectionChanged: (selection) {
+        if (selection.isNotEmpty) {
+          onSelected(selection.first);
+        }
+      },
+    );
+  }
+}
+
+class _KpiTile extends StatelessWidget {
+  const _KpiTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      constraints: const BoxConstraints(minWidth: 140),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: colorScheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value, style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InsightLine extends StatelessWidget {
+  const _InsightLine({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 18, color: colorScheme.primary),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
+        ),
+      ],
     );
   }
 }
@@ -310,8 +530,9 @@ class _PiePainter extends CustomPainter {
     }
 
     final holePaint = Paint()
-      ..color = Colors.black.withOpacity(
-        ThemeData.estimateBrightnessForColor(slices.first.color) ==
+      ..color = Colors.black.withValues(
+        alpha:
+            ThemeData.estimateBrightnessForColor(slices.first.color) ==
                 Brightness.dark
             ? 0.28
             : 0.08,
@@ -323,43 +544,6 @@ class _PiePainter extends CustomPainter {
   bool shouldRepaint(covariant _PiePainter oldDelegate) {
     return oldDelegate.slices != slices;
   }
-}
-
-class _RhythmPoint {
-  const _RhythmPoint({required this.day, required this.count, this.primaryId});
-
-  final DateTime day;
-  final int count;
-  final String? primaryId;
-}
-
-List<_RhythmPoint> _lastNDays(
-  Map<DateTime, int> dayCounts,
-  Map<DateTime, String> dayDominantMood,
-  int days,
-) {
-  final today = DateTime.now();
-  final start = DateTime(
-    today.year,
-    today.month,
-    today.day,
-  ).subtract(Duration(days: days - 1));
-  return List.generate(days, (index) {
-    final day = start.add(Duration(days: index));
-    return _RhythmPoint(
-      day: day,
-      count: dayCounts[day] ?? 0,
-      primaryId: dayDominantMood[day],
-    );
-  });
-}
-
-String _percent(int part, int total) {
-  if (total == 0) {
-    return '0%';
-  }
-  final value = (part / total * 100).round();
-  return '$value%';
 }
 
 class _MoodRow extends StatelessWidget {
@@ -401,7 +585,7 @@ class _MoodRow extends StatelessWidget {
             value: ratio,
             minHeight: 7,
             valueColor: AlwaysStoppedAnimation<Color>(color),
-            backgroundColor: color.withOpacity(0.15),
+            backgroundColor: color.withValues(alpha: 0.15),
           ),
         ),
       ],
@@ -434,7 +618,7 @@ class _StatRow extends StatelessWidget {
 class _RhythmChart extends StatelessWidget {
   const _RhythmChart({required this.series});
 
-  final List<_RhythmPoint> series;
+  final List<RhythmPoint> series;
 
   @override
   Widget build(BuildContext context) {
@@ -454,12 +638,14 @@ class _RhythmChart extends StatelessWidget {
               child: Container(
                 height: height,
                 decoration: BoxDecoration(
-                  color: point.count == 0
-                      ? Theme.of(context).colorScheme.outline.withOpacity(0.15)
+                  color: point.count == 0 || point.primaryId == null
+                      ? Theme.of(
+                          context,
+                        ).colorScheme.outline.withValues(alpha: 0.15)
                       : emotionColor(
                           context,
-                          point.primaryId ?? EmotionCatalog.wheel.first.id,
-                        ).withOpacity(0.75),
+                          point.primaryId!,
+                        ).withValues(alpha: 0.75),
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),

@@ -8,7 +8,7 @@ import 'package:sentiment/models/entry.dart';
 class ExportService {
   Future<void> exportJson(List<JournalEntry> entries) async {
     final json = jsonEncode({
-      'version': 1,
+      'version': 2,
       'entries': entries.map((entry) => entry.toJson()).toList(),
     });
 

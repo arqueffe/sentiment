@@ -10,6 +10,7 @@ class HiveAdapters {
       return;
     }
     Hive.registerAdapter(EmotionSelectionAdapter());
+    Hive.registerAdapter(SentenceEmotionAnnotationAdapter());
     Hive.registerAdapter(JournalEntryAdapter());
     _registered = true;
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:sentiment/models/emotion.dart';
 import 'package:sentiment/models/entry.dart';
 import 'package:sentiment/ui/widgets/mood_chip.dart';
 
@@ -17,31 +18,64 @@ class EntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
-      onTap: onTap,
-      child: Ink(
-        decoration: BoxDecoration(
-          color:
-              Theme.of(context).cardTheme.color ??
-              Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(20),
-        ),
+    final mainSentenceEmotion = _mainSentenceEmotionSelection(
+      entry.sentenceEmotionAnnotations,
+    );
+    final colorScheme = Theme.of(context).colorScheme;
+    final hasTags =
+        entry.preMoodSelection != null ||
+        entry.postMoodSelection != null ||
+        mainSentenceEmotion != null;
+    final analyzedCount = entry.sentenceEmotionAnnotations.length;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(dateLabel, style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(
+                    Icons.calendar_today_outlined,
+                    size: 16,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    dateLabel,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
               Text(
                 entry.body,
-                maxLines: 2,
+                maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
-              if (entry.preMoodSelection != null ||
-                  entry.postMoodSelection != null)
+              if (analyzedCount > 0) ...[
+                const SizedBox(height: 10),
+                Text(
+                  '$analyzedCount ${analyzedCount == 1 ? 'sentence' : 'sentences'} analyzed',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              if (hasTags)
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
                   child: Wrap(
@@ -60,6 +94,12 @@ class EntryCard extends StatelessWidget {
                           selection: entry.postMoodSelection,
                           role: 'After',
                         ),
+                      if (mainSentenceEmotion != null)
+                        MoodChip(
+                          label: mainSentenceEmotion.label,
+                          selection: mainSentenceEmotion,
+                          role: 'Detected',
+                        ),
                     ],
                   ),
                 ),
@@ -68,5 +108,36 @@ class EntryCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  EmotionSelection? _mainSentenceEmotionSelection(
+    List<SentenceEmotionAnnotation> annotations,
+  ) {
+    final counts = <String, int>{};
+    for (final annotation in annotations) {
+      final emotionId = annotation.primaryEmotionId;
+      if (emotionId == null) {
+        continue;
+      }
+      counts.update(emotionId, (value) => value + 1, ifAbsent: () => 1);
+    }
+
+    if (counts.isEmpty) {
+      return null;
+    }
+
+    String? dominantId;
+    var dominantCount = 0;
+    for (final entry in counts.entries) {
+      if (entry.value > dominantCount) {
+        dominantId = entry.key;
+        dominantCount = entry.value;
+      }
+    }
+
+    if (dominantId == null) {
+      return null;
+    }
+    return EmotionSelection(primaryId: dominantId);
   }
 }
