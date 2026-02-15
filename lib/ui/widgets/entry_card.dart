@@ -21,33 +21,61 @@ class EntryCard extends StatelessWidget {
     final mainSentenceEmotion = _mainSentenceEmotionSelection(
       entry.sentenceEmotionAnnotations,
     );
+    final colorScheme = Theme.of(context).colorScheme;
+    final hasTags =
+        entry.preMoodSelection != null ||
+        entry.postMoodSelection != null ||
+        mainSentenceEmotion != null;
+    final analyzedCount = entry.sentenceEmotionAnnotations.length;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
-      onTap: onTap,
-      child: Ink(
-        decoration: BoxDecoration(
-          color:
-              Theme.of(context).cardTheme.color ??
-              Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(20),
-        ),
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(dateLabel, style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(
+                    Icons.calendar_today_outlined,
+                    size: 16,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    dateLabel,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
               Text(
                 entry.body,
-                maxLines: 2,
+                maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
-              if (entry.preMoodSelection != null ||
-                  entry.postMoodSelection != null ||
-                  mainSentenceEmotion != null)
+              if (analyzedCount > 0) ...[
+                const SizedBox(height: 10),
+                Text(
+                  '$analyzedCount ${analyzedCount == 1 ? 'sentence' : 'sentences'} analyzed',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              if (hasTags)
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
                   child: Wrap(

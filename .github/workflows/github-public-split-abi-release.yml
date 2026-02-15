@@ -1,0 +1,105 @@
+name: GitHub Public Split-ABI Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_part:
+        description: Version part to bump before building
+        required: true
+        default: patch
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+          - build
+      prerelease:
+        description: Mark release as pre-release
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release-github:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Bump version
+        run: dart run tools/bump_version.dart --part ${{ inputs.bump_part }}
+
+      - name: Read app version
+        id: version
+        run: |
+          APP_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//')
+          APP_SEMVER=${APP_VERSION%%+*}
+          APP_BUILD=${APP_VERSION##*+}
+          RELEASE_TAG="v${APP_SEMVER}-build.${APP_BUILD}"
+          echo "app_version=$APP_VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Commit bumped version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pubspec.yaml
+          if git diff --cached --quiet; then
+            echo "No version change to commit"
+          else
+            git commit -m "chore: bump version to ${{ steps.version.outputs.app_version }}"
+            git push
+          fi
+
+      - name: Decode Android keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
+
+      - name: Write Android key.properties
+        run: |
+          cat > android/key.properties <<'EOF'
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          storeFile=app/upload-keystore.jks
+          EOF
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build split-ABI APKs
+        run: flutter build apk --release --split-per-abi
+
+      - name: Create Git tag
+        run: |
+          git tag "${{ steps.version.outputs.release_tag }}"
+          git push origin "${{ steps.version.outputs.release_tag }}"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.release_tag }}
+          name: ${{ steps.version.outputs.release_tag }}
+          prerelease: ${{ inputs.prerelease }}
+          files: |
+            build/app/outputs/flutter-apk/app-*-release.apk
+          body: |
+            Public split-ABI release for version ${{ steps.version.outputs.app_version }}.
+            APKs are signed and ready to install.

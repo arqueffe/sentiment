@@ -43,6 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/key.properties
+/android/app/upload-keystore.jks
 
 # Local ONNX export artifacts
 /bert-emotion/model.onnx
@@ -54,3 +56,4 @@ app.*.map.json
 
 # Python virtual environment venv/
 .venv/
+upload-keystore.jks

@@ -162,12 +162,15 @@ class SettingsScreen extends ConsumerWidget {
             future: PackageInfo.fromPlatform(),
             builder: (context, snapshot) {
               final info = snapshot.data;
-              final version = info == null
-                  ? 'Version'
-                  : 'Version ${info.version}+${info.buildNumber}';
+              final versionLabel = switch (snapshot.connectionState) {
+                ConnectionState.waiting => 'Loading version…',
+                _ when snapshot.hasError => 'Version unavailable',
+                _ when info == null => 'Version unavailable',
+                _ => '${info.version}+${info.buildNumber}',
+              };
               return _InfoTile(
-                title: version,
-                subtitle: 'Sentiment journal',
+                title: 'App version',
+                subtitle: versionLabel,
                 icon: Icons.info_outline,
               );
             },
