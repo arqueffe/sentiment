@@ -46,7 +46,13 @@ class _EntryListScreenState extends ConsumerState<EntryListScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Journal'),
+        title: Row(
+          children: [
+            Image.asset('assets/images/logo.png', height: 24, width: 24),
+            const SizedBox(width: 8),
+            const Text('Journal'),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'Pick date',

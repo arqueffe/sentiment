@@ -97,115 +97,131 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
             constraints: const BoxConstraints(maxWidth: 460),
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            color: colorScheme.primaryContainer,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            isSetup
-                                ? Icons.lock_open_rounded
-                                : Icons.lock_rounded,
-                            color: colorScheme.onPrimaryContainer,
-                            size: 30,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        isSetup ? 'Unlock your journal' : 'Create your lock',
-                        style: textTheme.headlineSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        isSetup
-                            ? 'Your entries stay private and protected on this device.'
-                            : 'Set a password to encrypt your journal on this device.',
-                        style: textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      TextField(
-                        controller: _passwordController,
-                        obscureText: true,
-                        textInputAction: TextInputAction.done,
-                        decoration: const InputDecoration(
-                          labelText: 'Password',
-                          prefixIcon: Icon(Icons.password_rounded),
-                        ),
-                        onSubmitted: (_) => _submit(),
-                      ),
-                      const SizedBox(height: 16),
-                      if (!isSetup)
-                        SwitchListTile.adaptive(
-                          contentPadding: EdgeInsets.zero,
-                          value: _enableBiometric,
-                          onChanged: (value) {
-                            setState(() {
-                              _enableBiometric = value;
-                            });
-                          },
-                          title: const Text('Enable biometrics on this device'),
-                          subtitle: const Text('Optional quick unlock'),
-                        ),
-                      if (_error != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          _error!,
-                          style: textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.error,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: _isSubmitting ? null : _submit,
-                          icon: _isSubmitting
-                              ? SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: colorScheme.onPrimary,
-                                  ),
-                                )
-                              : Icon(
-                                  isSetup
-                                      ? Icons.lock_open_rounded
-                                      : Icons.lock_rounded,
-                                ),
-                          label: Text(isSetup ? 'Unlock' : 'Create lock'),
-                        ),
-                      ),
-                      if (canBiometric) ...[
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: _isSubmitting
-                                ? null
-                                : _unlockWithBiometrics,
-                            icon: const Icon(Icons.fingerprint_rounded),
-                            label: const Text('Use biometrics'),
-                          ),
-                        ),
-                      ],
-                    ],
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/images/logo.png',
+                    width: 200,
+                    height: 200,
+                    fit: BoxFit.contain,
                   ),
-                ),
+                  const SizedBox(height: 20),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                color: colorScheme.primaryContainer,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                isSetup
+                                    ? Icons.lock_open_rounded
+                                    : Icons.lock_rounded,
+                                color: colorScheme.onPrimaryContainer,
+                                size: 30,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            isSetup
+                                ? 'Unlock your journal'
+                                : 'Create your lock',
+                            style: textTheme.headlineSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            isSetup
+                                ? 'Your entries stay private and protected on this device.'
+                                : 'Set a password to encrypt your journal on this device.',
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          TextField(
+                            controller: _passwordController,
+                            obscureText: true,
+                            textInputAction: TextInputAction.done,
+                            decoration: const InputDecoration(
+                              labelText: 'Password',
+                              prefixIcon: Icon(Icons.password_rounded),
+                            ),
+                            onSubmitted: (_) => _submit(),
+                          ),
+                          const SizedBox(height: 16),
+                          if (!isSetup)
+                            SwitchListTile.adaptive(
+                              contentPadding: EdgeInsets.zero,
+                              value: _enableBiometric,
+                              onChanged: (value) {
+                                setState(() {
+                                  _enableBiometric = value;
+                                });
+                              },
+                              title: const Text(
+                                'Enable biometrics on this device',
+                              ),
+                              subtitle: const Text('Optional quick unlock'),
+                            ),
+                          if (_error != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              _error!,
+                              style: textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.error,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 20),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: _isSubmitting ? null : _submit,
+                              icon: _isSubmitting
+                                  ? SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: colorScheme.onPrimary,
+                                      ),
+                                    )
+                                  : Icon(
+                                      isSetup
+                                          ? Icons.lock_open_rounded
+                                          : Icons.lock_rounded,
+                                    ),
+                              label: Text(isSetup ? 'Unlock' : 'Create lock'),
+                            ),
+                          ),
+                          if (canBiometric) ...[
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: _isSubmitting
+                                    ? null
+                                    : _unlockWithBiometrics,
+                                icon: const Icon(Icons.fingerprint_rounded),
+                                label: const Text('Use biometrics'),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

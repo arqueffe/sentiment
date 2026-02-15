@@ -12,6 +12,14 @@ class OnboardingDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Center(
+              child: Image(
+                image: AssetImage('assets/images/logo.png'),
+                width: 56,
+                height: 56,
+              ),
+            ),
+            SizedBox(height: 12),
             Text('A private journal that stays on your phone.'),
             SizedBox(height: 12),
             Text('• Write entries anytime and revisit them later.'),
