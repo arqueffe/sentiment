@@ -29,6 +29,11 @@ class EmotionInferenceService {
   static const String _modelAssetPath = 'assets/models/bert-emotion.onnx';
   static const String _vocabAssetPath = 'bert-emotion/vocab.txt';
   static const String _configAssetPath = 'bert-emotion/config.json';
+  static const EmotionPrediction _neutralPrediction = EmotionPrediction(
+    modelLabel: EmotionLabelMapper.neutralLabel,
+    confidence: 1,
+    primaryEmotionId: null,
+  );
 
   static const List<String> _defaultLabelOrder = [
     'sadness',
@@ -66,11 +71,7 @@ class EmotionInferenceService {
 
   Future<EmotionPrediction> classifySentence(String sentence) async {
     if (sentence.trim().isEmpty) {
-      return const EmotionPrediction(
-        modelLabel: EmotionLabelMapper.neutralLabel,
-        confidence: 1,
-        primaryEmotionId: null,
-      );
+      return _neutralPrediction;
     }
 
     try {
@@ -79,11 +80,7 @@ class EmotionInferenceService {
       }
 
       if (!isReady) {
-        return const EmotionPrediction(
-          modelLabel: EmotionLabelMapper.neutralLabel,
-          confidence: 1,
-          primaryEmotionId: null,
-        );
+        return _neutralPrediction;
       }
 
       final encoded = Int64List.fromList(_encodeSentence(sentence));
@@ -114,11 +111,7 @@ class EmotionInferenceService {
             .map((value) => (value as num).toDouble())
             .toList();
         if (logits.isEmpty) {
-          return const EmotionPrediction(
-            modelLabel: EmotionLabelMapper.neutralLabel,
-            confidence: 1,
-            primaryEmotionId: null,
-          );
+          return _neutralPrediction;
         }
 
         final index = _argmax(logits);
@@ -139,11 +132,7 @@ class EmotionInferenceService {
         }
       }
     } catch (_) {
-      return const EmotionPrediction(
-        modelLabel: EmotionLabelMapper.neutralLabel,
-        confidence: 1,
-        primaryEmotionId: null,
-      );
+      return _neutralPrediction;
     }
   }
 

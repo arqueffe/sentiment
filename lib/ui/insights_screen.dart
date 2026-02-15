@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:sentiment/models/emotion.dart';
 import 'package:sentiment/models/entry.dart';
 import 'package:sentiment/state/providers.dart';
+import 'package:sentiment/ui/insights/insights_metrics.dart';
 import 'package:sentiment/ui/widgets/emotion_color.dart';
 import 'package:sentiment/ui/widgets/settings_button.dart';
 
@@ -53,71 +54,7 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
             );
           }
 
-          final moodCounts = <String, int>{};
-          final dayCounts = <DateTime, int>{};
-          final dayDominantMood = <DateTime, String>{};
-          int preCount = 0;
-          int postCount = 0;
-          var totalMoodSamples = 0;
-
-          for (final entry in filteredItems) {
-            final day = DateTime(
-              entry.createdAt.year,
-              entry.createdAt.month,
-              entry.createdAt.day,
-            );
-            dayCounts[day] = (dayCounts[day] ?? 0) + 1;
-
-            final pre = entry.preMoodSelection?.primaryId;
-            final post = entry.postMoodSelection?.primaryId;
-            final detectedCounts = <String, int>{};
-            for (final annotation in entry.sentenceEmotionAnnotations) {
-              final detected = annotation.primaryEmotionId;
-              if (detected == null) {
-                continue;
-              }
-              detectedCounts.update(
-                detected,
-                (value) => value + 1,
-                ifAbsent: () => 1,
-              );
-              moodCounts[detected] = (moodCounts[detected] ?? 0) + 1;
-              totalMoodSamples += 1;
-            }
-
-            String? dominantDetected;
-            var dominantDetectedCount = 0;
-            for (final detectedEntry in detectedCounts.entries) {
-              if (detectedEntry.value > dominantDetectedCount) {
-                dominantDetected = detectedEntry.key;
-                dominantDetectedCount = detectedEntry.value;
-              }
-            }
-
-            if (post != null) {
-              dayDominantMood[day] = post;
-            } else if (pre != null) {
-              dayDominantMood.putIfAbsent(day, () => pre);
-            } else if (dominantDetected != null) {
-              dayDominantMood.putIfAbsent(day, () => dominantDetected!);
-            }
-
-            if (pre != null) {
-              moodCounts[pre] = (moodCounts[pre] ?? 0) + 1;
-              preCount += 1;
-              totalMoodSamples += 1;
-            }
-            if (post != null) {
-              moodCounts[post] = (moodCounts[post] ?? 0) + 1;
-              postCount += 1;
-              totalMoodSamples += 1;
-            }
-          }
-
-          final moodSorted = moodCounts.entries.toList()
-            ..sort((a, b) => b.value.compareTo(a.value));
-
-          final dailySeries = _lastNDays(dayCounts, dayDominantMood, 14);
+          final metrics = buildInsightsMetrics(filteredItems);
 
           return ListView(
             padding: const EdgeInsets.all(20),
@@ -135,11 +72,11 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
               const SizedBox(height: 12),
               _StatRow(
                 label: 'Pre check-ins',
-                value: _percent(preCount, filteredItems.length),
+                value: percentString(metrics.preCount, filteredItems.length),
               ),
               _StatRow(
                 label: 'Post check-ins',
-                value: _percent(postCount, filteredItems.length),
+                value: percentString(metrics.postCount, filteredItems.length),
               ),
               const SizedBox(height: 24),
               Text(
@@ -147,10 +84,10 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 12),
-              _RhythmChart(series: dailySeries),
+              _RhythmChart(series: metrics.dailySeries),
               const SizedBox(height: 8),
               Text(
-                '${DateFormat.MMMd().format(dailySeries.first.day)} - ${DateFormat.MMMd().format(dailySeries.last.day)}',
+                '${DateFormat.MMMd().format(metrics.dailySeries.first.day)} - ${DateFormat.MMMd().format(metrics.dailySeries.last.day)}',
                 style: Theme.of(context).textTheme.labelLarge,
               ),
               const SizedBox(height: 24),
@@ -160,7 +97,7 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
               ),
               const SizedBox(height: 16),
               _MoodPie(
-                slices: moodSorted
+                slices: metrics.moodSorted
                     .map(
                       (entry) => _PieSlice(
                         label:
@@ -172,10 +109,11 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
                     .toList(),
               ),
               const SizedBox(height: 14),
-              ...moodSorted.take(6).map((entry) {
+              ...metrics.moodSorted.take(6).map((entry) {
                 final label =
                     EmotionCatalog.byId(entry.key)?.label ?? entry.key;
-                final ratio = entry.value / totalMoodSamples.clamp(1, 1000000);
+                final ratio =
+                    entry.value / metrics.totalMoodSamples.clamp(1, 1000000);
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _MoodRow(
@@ -351,43 +289,6 @@ class _PiePainter extends CustomPainter {
   }
 }
 
-class _RhythmPoint {
-  const _RhythmPoint({required this.day, required this.count, this.primaryId});
-
-  final DateTime day;
-  final int count;
-  final String? primaryId;
-}
-
-List<_RhythmPoint> _lastNDays(
-  Map<DateTime, int> dayCounts,
-  Map<DateTime, String> dayDominantMood,
-  int days,
-) {
-  final today = DateTime.now();
-  final start = DateTime(
-    today.year,
-    today.month,
-    today.day,
-  ).subtract(Duration(days: days - 1));
-  return List.generate(days, (index) {
-    final day = start.add(Duration(days: index));
-    return _RhythmPoint(
-      day: day,
-      count: dayCounts[day] ?? 0,
-      primaryId: dayDominantMood[day],
-    );
-  });
-}
-
-String _percent(int part, int total) {
-  if (total == 0) {
-    return '0%';
-  }
-  final value = (part / total * 100).round();
-  return '$value%';
-}
-
 class _MoodRow extends StatelessWidget {
   const _MoodRow({
     required this.label,
@@ -460,7 +361,7 @@ class _StatRow extends StatelessWidget {
 class _RhythmChart extends StatelessWidget {
   const _RhythmChart({required this.series});
 
-  final List<_RhythmPoint> series;
+  final List<RhythmPoint> series;
 
   @override
   Widget build(BuildContext context) {
@@ -480,13 +381,13 @@ class _RhythmChart extends StatelessWidget {
               child: Container(
                 height: height,
                 decoration: BoxDecoration(
-                  color: point.count == 0
+                  color: point.count == 0 || point.primaryId == null
                       ? Theme.of(
                           context,
                         ).colorScheme.outline.withValues(alpha: 0.15)
                       : emotionColor(
                           context,
-                          point.primaryId ?? EmotionCatalog.wheel.first.id,
+                          point.primaryId!,
                         ).withValues(alpha: 0.75),
                   borderRadius: BorderRadius.circular(8),
                 ),

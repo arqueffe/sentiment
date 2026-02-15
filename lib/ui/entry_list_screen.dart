@@ -90,7 +90,7 @@ class _EntryListScreenState extends ConsumerState<EntryListScreen> {
                 ).pushNamed(AppRouter.entryDetail, arguments: entry),
               );
             },
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            separatorBuilder: (_, index) => const SizedBox(height: 12),
             itemCount: filtered.length,
           );
         },
