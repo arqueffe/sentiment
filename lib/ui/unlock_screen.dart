@@ -12,6 +12,7 @@ class UnlockScreen extends ConsumerStatefulWidget {
 
 class _UnlockScreenState extends ConsumerState<UnlockScreen> {
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _enableBiometric = false;
   bool _isSubmitting = false;
   String? _error;
@@ -19,10 +20,13 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
   @override
   void dispose() {
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
+    final authState = ref.read(authControllerProvider);
+    final isSetup = authState.hasPassword;
     final password = _passwordController.text.trim();
     if (password.isEmpty) {
       setState(() {
@@ -31,12 +35,27 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
       return;
     }
 
+    if (!isSetup) {
+      final confirmPassword = _confirmPasswordController.text.trim();
+      if (confirmPassword.isEmpty) {
+        setState(() {
+          _error = 'Please confirm your password';
+        });
+        return;
+      }
+      if (confirmPassword != password) {
+        setState(() {
+          _error = 'Passwords do not match';
+        });
+        return;
+      }
+    }
+
     setState(() {
       _isSubmitting = true;
       _error = null;
     });
 
-    final authState = ref.read(authControllerProvider);
     final controller = ref.read(authControllerProvider.notifier);
 
     bool success = false;
@@ -151,13 +170,32 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
                           TextField(
                             controller: _passwordController,
                             obscureText: true,
-                            textInputAction: TextInputAction.done,
+                            textInputAction: isSetup
+                                ? TextInputAction.done
+                                : TextInputAction.next,
                             decoration: const InputDecoration(
                               labelText: 'Password',
                               prefixIcon: Icon(Icons.password_rounded),
                             ),
-                            onSubmitted: (_) => _submit(),
+                            onSubmitted: (_) {
+                              if (isSetup) {
+                                _submit();
+                              }
+                            },
                           ),
+                          if (!isSetup) ...[
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _confirmPasswordController,
+                              obscureText: true,
+                              textInputAction: TextInputAction.done,
+                              decoration: const InputDecoration(
+                                labelText: 'Confirm password',
+                                prefixIcon: Icon(Icons.password_rounded),
+                              ),
+                              onSubmitted: (_) => _submit(),
+                            ),
+                          ],
                           const SizedBox(height: 16),
                           if (!isSetup)
                             SwitchListTile.adaptive(

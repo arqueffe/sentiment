@@ -38,7 +38,13 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Insights'),
+        title: Row(
+          children: [
+            Image.asset('assets/images/logo.png', height: 24, width: 24),
+            const SizedBox(width: 8),
+            const Text('Insights'),
+          ],
+        ),
         actions: const [SettingsButton()],
       ),
       body: entries.when(

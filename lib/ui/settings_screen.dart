@@ -17,7 +17,11 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
-    final darkModeEnabled = themeMode == ThemeMode.dark;
+    final isSystemDark =
+        MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final darkModeEnabled =
+        themeMode == ThemeMode.dark ||
+        (themeMode == ThemeMode.system && isSystemDark);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -43,6 +47,10 @@ class SettingsScreen extends ConsumerWidget {
             subtitle: 'JSON file with moods and timestamps',
             icon: Icons.upload_outlined,
             onTap: () async {
+              final confirmed = await _confirmUnencryptedExport(context);
+              if (!confirmed) {
+                return;
+              }
               final entries = await ref.read(entriesProvider.future);
               await ref.read(exportServiceProvider).exportJson(entries);
               if (context.mounted) {
@@ -205,7 +213,7 @@ class SettingsScreen extends ConsumerWidget {
           ),
           _ActionTile(
             title: 'BERT Emotion (Apache 2.0)',
-            subtitle: 'Future on-device model',
+            subtitle: 'On-device model',
             icon: Icons.description_outlined,
             onTap: () => _openLicense(
               context,
@@ -234,6 +242,30 @@ class SettingsScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+Future<bool> _confirmUnencryptedExport(BuildContext context) async {
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Unencrypted export warning'),
+      content: const Text(
+        'Exports are not encrypted yet and can be read by anyone. '
+        'Only save the file in a secure location you trust.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Export anyway'),
+        ),
+      ],
+    ),
+  );
+  return result ?? false;
 }
 
 class _ChangePasswordData {
