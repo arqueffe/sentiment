@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:intl/intl.dart';
 
 import 'package:sentiment/models/emotion.dart';
@@ -68,6 +69,15 @@ class _AnnotatedEntryBody extends StatefulWidget {
 
 class _AnnotatedEntryBodyState extends State<_AnnotatedEntryBody> {
   String? _hoveredEmotionLabel;
+  final List<TapGestureRecognizer> _tapRecognizers = [];
+
+  @override
+  void dispose() {
+    for (final recognizer in _tapRecognizers) {
+      recognizer.dispose();
+    }
+    super.dispose();
+  }
 
   void _setHoveredEmotionLabel(SentenceEmotionAnnotation? annotation) {
     final primaryEmotionId = annotation?.primaryEmotionId;
@@ -84,6 +94,11 @@ class _AnnotatedEntryBodyState extends State<_AnnotatedEntryBody> {
 
   @override
   Widget build(BuildContext context) {
+    for (final recognizer in _tapRecognizers) {
+      recognizer.dispose();
+    }
+    _tapRecognizers.clear();
+
     final baseStyle = Theme.of(context).textTheme.bodyLarge;
     final annotations = widget.entry.sentenceEmotionAnnotations
       ..sort((a, b) => a.start.compareTo(b.start));
@@ -117,10 +132,18 @@ class _AnnotatedEntryBodyState extends State<_AnnotatedEntryBody> {
               decorationThickness: 2,
             );
 
+      TapGestureRecognizer? tapRecognizer;
+      if (primaryEmotionId != null) {
+        tapRecognizer = TapGestureRecognizer()
+          ..onTap = () => _setHoveredEmotionLabel(annotation);
+        _tapRecognizers.add(tapRecognizer);
+      }
+
       children.add(
         TextSpan(
           text: widget.entry.body.substring(annotation.start, annotation.end),
           style: sentenceStyle,
+          recognizer: tapRecognizer,
           mouseCursor: primaryEmotionId == null
               ? MouseCursor.defer
               : SystemMouseCursors.help,
@@ -151,7 +174,7 @@ class _AnnotatedEntryBodyState extends State<_AnnotatedEntryBody> {
         if (_hoveredEmotionLabel != null) ...[
           const SizedBox(height: 8),
           Text(
-            'Hovered sentence emotion: $_hoveredEmotionLabel',
+            'Sentence emotion: $_hoveredEmotionLabel',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],

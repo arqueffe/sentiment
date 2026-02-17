@@ -11,24 +11,42 @@ class SentenceEmotionState {
     this.body = '',
     this.annotations = const [],
     this.counts = const {},
+    this.overallModelLabel = '',
+    this.overallEmotionConfidence,
+    this.overallEmotionChunkCount = 0,
+    this.overallDistribution = const {},
     this.isClassifying = false,
   });
 
   final String body;
   final List<SentenceEmotionAnnotation> annotations;
   final Map<String, int> counts;
+  final String overallModelLabel;
+  final double? overallEmotionConfidence;
+  final int overallEmotionChunkCount;
+  final Map<String, double> overallDistribution;
   final bool isClassifying;
 
   SentenceEmotionState copyWith({
     String? body,
     List<SentenceEmotionAnnotation>? annotations,
     Map<String, int>? counts,
+    String? overallModelLabel,
+    double? overallEmotionConfidence,
+    int? overallEmotionChunkCount,
+    Map<String, double>? overallDistribution,
     bool? isClassifying,
   }) {
     return SentenceEmotionState(
       body: body ?? this.body,
       annotations: annotations ?? this.annotations,
       counts: counts ?? this.counts,
+      overallModelLabel: overallModelLabel ?? this.overallModelLabel,
+      overallEmotionConfidence:
+          overallEmotionConfidence ?? this.overallEmotionConfidence,
+      overallEmotionChunkCount:
+          overallEmotionChunkCount ?? this.overallEmotionChunkCount,
+      overallDistribution: overallDistribution ?? this.overallDistribution,
       isClassifying: isClassifying ?? this.isClassifying,
     );
   }
@@ -51,8 +69,12 @@ class SentenceEmotionController extends StateNotifier<SentenceEmotionState> {
     state = state.copyWith(body: body, isClassifying: true);
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 250), () async {
-      final completed = _extractCompletedSentences(state.body);
+      final targetBody = state.body;
+      final completed = _extractCompletedSentences(targetBody);
       final annotations = <SentenceEmotionAnnotation>[];
+      final overallPrediction = await _inferenceService.classifyEntry(
+        targetBody,
+      );
 
       for (final span in completed) {
         final sentence = span.text.trim();
@@ -73,9 +95,16 @@ class SentenceEmotionController extends StateNotifier<SentenceEmotionState> {
       }
 
       final counts = _buildCounts(annotations);
+      if (state.body != targetBody) {
+        return;
+      }
       state = state.copyWith(
         annotations: annotations,
         counts: counts,
+        overallModelLabel: overallPrediction.modelLabel,
+        overallEmotionConfidence: overallPrediction.confidence,
+        overallEmotionChunkCount: overallPrediction.chunkCount,
+        overallDistribution: overallPrediction.labelProbabilities,
         isClassifying: false,
       );
     });

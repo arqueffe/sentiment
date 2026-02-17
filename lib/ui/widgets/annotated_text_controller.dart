@@ -7,6 +7,30 @@ class AnnotatedTextController extends TextEditingController {
   List<SentenceEmotionAnnotation> _annotations = const [];
   ValueChanged<SentenceEmotionAnnotation?>? onAnnotationHover;
 
+  SentenceEmotionAnnotation? annotationNearOffset(int offset) {
+    if (_annotations.isEmpty || text.isEmpty) {
+      return null;
+    }
+
+    final normalizedOffset = offset.clamp(0, text.length);
+    final candidates = normalizedOffset > 0
+        ? <int>[normalizedOffset, normalizedOffset - 1]
+        : <int>[normalizedOffset];
+
+    for (final candidate in candidates) {
+      for (final annotation in _annotations) {
+        if (annotation.primaryEmotionId == null) {
+          continue;
+        }
+        if (candidate >= annotation.start && candidate < annotation.end) {
+          return annotation;
+        }
+      }
+    }
+
+    return null;
+  }
+
   void setAnnotations(List<SentenceEmotionAnnotation> annotations) {
     if (_sameAnnotations(_annotations, annotations)) {
       return;

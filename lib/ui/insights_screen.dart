@@ -453,21 +453,7 @@ class _MoodPie extends StatelessWidget {
         SizedBox(
           width: 160,
           height: 160,
-          child: CustomPaint(
-            painter: _PiePainter(slices: slices),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '$total',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  Text('moods', style: Theme.of(context).textTheme.labelLarge),
-                ],
-              ),
-            ),
-          ),
+          child: CustomPaint(painter: _PiePainter(slices: slices)),
         ),
         const SizedBox(width: 14),
         Expanded(

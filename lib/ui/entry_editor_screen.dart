@@ -37,6 +37,19 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   void initState() {
     super.initState();
     _bodyController.onAnnotationHover = _onAnnotationHover;
+    _bodyController.addListener(_onBodySelectionChanged);
+  }
+
+  void _onBodySelectionChanged() {
+    final selection = _bodyController.selection;
+    if (!selection.isValid) {
+      return;
+    }
+
+    final annotation = _bodyController.annotationNearOffset(
+      selection.baseOffset,
+    );
+    _onAnnotationHover(annotation);
   }
 
   void _onAnnotationHover(SentenceEmotionAnnotation? annotation) {
@@ -65,6 +78,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
 
   @override
   void dispose() {
+    _bodyController.removeListener(_onBodySelectionChanged);
     _bodyController.dispose();
     _pageController.dispose();
     super.dispose();
@@ -113,6 +127,14 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   }
 
   Future<void> _goToStep(int step) async {
+    if (step == 2) {
+      ref
+          .read(sentenceEmotionControllerProvider.notifier)
+          .setBody(_bodyController.text);
+    }
+    if (step != 1) {
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
     await _pageController.animateToPage(
       step,
       duration: const Duration(milliseconds: 220),
@@ -191,6 +213,12 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
                 _DetectedStatsStep(
                   counts: sentenceEmotionState.counts,
                   totalClassified: sentenceEmotionState.annotations.length,
+                  overallModelLabel: sentenceEmotionState.overallModelLabel,
+                  overallEmotionConfidence:
+                      sentenceEmotionState.overallEmotionConfidence,
+                  overallEmotionChunkCount:
+                      sentenceEmotionState.overallEmotionChunkCount,
+                  overallDistribution: sentenceEmotionState.overallDistribution,
                 ),
                 _MoodStep(
                   prompt: 'How do you feel after writing?',
@@ -308,6 +336,7 @@ class _WriteStep extends StatelessWidget {
           onChanged: onChanged,
           maxLines: 14,
           autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
           decoration: const InputDecoration(
             hintText: 'Write freely...\nNothing leaves your device.',
           ),
@@ -322,7 +351,7 @@ class _WriteStep extends StatelessWidget {
         if (hoveredEmotionLabel != null) ...[
           const SizedBox(height: 4),
           Text(
-            'Hovered sentence emotion: $hoveredEmotionLabel',
+            'Current sentence emotion: $hoveredEmotionLabel',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
@@ -335,15 +364,38 @@ class _DetectedStatsStep extends StatelessWidget {
   const _DetectedStatsStep({
     required this.counts,
     required this.totalClassified,
+    required this.overallModelLabel,
+    required this.overallEmotionConfidence,
+    required this.overallEmotionChunkCount,
+    required this.overallDistribution,
   });
 
   final Map<String, int> counts;
   final int totalClassified;
+  final String overallModelLabel;
+  final double? overallEmotionConfidence;
+  final int overallEmotionChunkCount;
+  final Map<String, double> overallDistribution;
+
+  String _formatLabel(String raw) {
+    if (raw.trim().isEmpty) {
+      return 'Unknown';
+    }
+    final normalized = raw.replaceAll('_', ' ').trim();
+    return normalized[0].toUpperCase() + normalized.substring(1);
+  }
 
   @override
   Widget build(BuildContext context) {
     final entries = counts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
+    final overallEntries = overallDistribution.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final topOverall = overallEntries.take(5).toList();
+    final hasOverall = overallModelLabel.trim().isNotEmpty;
+    final confidenceText = overallEmotionConfidence == null
+        ? null
+        : '${(overallEmotionConfidence! * 100).toStringAsFixed(1)}%';
 
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -358,6 +410,53 @@ class _DetectedStatsStep extends StatelessWidget {
               ? 'No completed sentences detected yet.'
               : '$totalClassified completed sentences were classified.',
           style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Overall entry estimate',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  hasOverall
+                      ? _formatLabel(overallModelLabel)
+                      : 'Write more text to estimate overall emotion.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                if (hasOverall && confidenceText != null)
+                  Text(
+                    'Confidence: $confidenceText',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                if (hasOverall)
+                  Text(
+                    overallEmotionChunkCount > 1
+                        ? 'Based on $overallEmotionChunkCount averaged text chunks.'
+                        : 'Based on a single text chunk.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                if (topOverall.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  for (final item in topOverall)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: [
+                          Expanded(child: Text(_formatLabel(item.key))),
+                          Text('${(item.value * 100).toStringAsFixed(1)}%'),
+                        ],
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 16),
         if (entries.isEmpty)
