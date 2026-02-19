@@ -47,6 +47,7 @@ dependencies:
   shared_preferences: ^2.3.2
   path_provider: ^2.1.4
   flutter_onnxruntime: ^1.6.2
+  dart_bert_tokenizer: ^1.0.2
 
 dev_dependencies:
   flutter_test:
@@ -74,7 +75,6 @@ flutter:
   assets:
     - assets/images/logo.png
     - assets/models/bert-emotion.onnx
-    - assets/models/bert-emotion.onnx.data
     - bert-emotion/config.json
     - bert-emotion/special_tokens_map.json
     - bert-emotion/tokenizer_config.json

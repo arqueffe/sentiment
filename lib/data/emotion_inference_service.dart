@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:dart_bert_tokenizer/dart_bert_tokenizer.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 import 'package:path_provider/path_provider.dart';
@@ -33,11 +34,9 @@ class EmotionInferenceService {
        _runtime = runtime ?? OnnxRuntime();
 
   static const String _modelAssetPath = 'assets/models/bert-emotion.onnx';
-  static const String _modelDataAssetPath =
-      'assets/models/bert-emotion.onnx.data';
   static const String _vocabAssetPath = 'bert-emotion/vocab.txt';
   static const String _configAssetPath = 'bert-emotion/config.json';
-  static const int _maxTokens = 128;
+  static const int _defaultMaxSequenceLength = 512;
   static const EmotionPrediction _neutralPrediction = EmotionPrediction(
     modelLabel: EmotionLabelMapper.neutralLabel,
     confidence: 1,
@@ -65,47 +64,37 @@ class EmotionInferenceService {
   final OnnxRuntime _runtime;
 
   OrtSession? _session;
-  Map<String, int>? _vocab;
+  WordPieceTokenizer? _tokenizer;
+  int _maxSequenceLength = _defaultMaxSequenceLength;
   List<String> _labelOrder = _defaultLabelOrder;
 
-  bool get isReady => _session != null && _vocab != null;
+  bool get isReady => _session != null && _tokenizer != null;
 
   Future<void> initialize() async {
     if (isReady) {
       return;
     }
-    _vocab ??= await _loadVocab();
-    _labelOrder = await _loadLabelOrder();
-    final modelPath = await _prepareModelFiles();
-    _session ??= await _runtime.createSession(modelPath);
-  }
 
-  Future<String> _prepareModelFiles() async {
-    final cacheDirectory = await getTemporaryDirectory();
-    final modelFile = File(
-      '${cacheDirectory.path}${Platform.pathSeparator}bert-emotion.onnx',
+    final config = await _loadConfig();
+    _maxSequenceLength = _resolveMaxSequenceLength(config);
+    _labelOrder = _resolveLabelOrder(config);
+
+    final vocabFile = await _copyAssetToAppSupport(
+      _vocabAssetPath,
+      outputFileName: 'vocab.txt',
     );
-    final modelDataFile = File(
-      '${cacheDirectory.path}${Platform.pathSeparator}bert-emotion.onnx.data',
+    final tokenizer = await WordPieceTokenizer.fromVocabFile(vocabFile.path);
+    tokenizer.enableTruncation(maxLength: _maxSequenceLength);
+    tokenizer.enablePadding(length: _maxSequenceLength);
+
+    final modelFile = await _copyAssetToAppSupport(
+      _modelAssetPath,
+      outputFileName: 'bert-emotion.onnx',
     );
+    final session = await _runtime.createSession(modelFile.path);
 
-    if (!await modelFile.exists()) {
-      final modelBytes = await rootBundle.load(_modelAssetPath);
-      await modelFile.writeAsBytes(
-        modelBytes.buffer.asUint8List(),
-        flush: true,
-      );
-    }
-
-    if (!await modelDataFile.exists()) {
-      final modelDataBytes = await rootBundle.load(_modelDataAssetPath);
-      await modelDataFile.writeAsBytes(
-        modelDataBytes.buffer.asUint8List(),
-        flush: true,
-      );
-    }
-
-    return modelFile.path;
+    _tokenizer = tokenizer;
+    _session = session;
   }
 
   Future<EmotionPrediction> classifySentence(String sentence) async {
@@ -114,7 +103,8 @@ class EmotionInferenceService {
     }
 
     try {
-      final probabilities = await _runInference(_encodeSentence(sentence));
+      final tokenized = _tokenize(sentence);
+      final probabilities = await _runInference(tokenized);
       if (probabilities.isEmpty) {
         return _neutralPrediction;
       }
@@ -125,53 +115,12 @@ class EmotionInferenceService {
   }
 
   Future<EmotionPrediction> classifyEntry(String text) async {
-    final normalized = text.trim();
-    if (normalized.isEmpty) {
-      return _neutralPrediction;
-    }
-
-    try {
-      final chunks = _splitTextIntoChunks(normalized);
-      if (chunks.isEmpty) {
-        return _neutralPrediction;
-      }
-
-      final aggregate = List<double>.filled(_labelOrder.length, 0);
-      var processedChunks = 0;
-
-      for (final chunk in chunks) {
-        final probabilities = await _runInference(_encodeSentence(chunk));
-        if (probabilities.isEmpty) {
-          continue;
-        }
-        for (var i = 0; i < aggregate.length && i < probabilities.length; i++) {
-          aggregate[i] += probabilities[i];
-        }
-        processedChunks += 1;
-      }
-
-      if (processedChunks == 0) {
-        return _neutralPrediction;
-      }
-
-      final averaged = aggregate
-          .map((value) => value / processedChunks)
-          .toList();
-      final normalizedAveraged = _normalizeProbabilities(averaged);
-      final prediction = _predictionFromProbabilities(normalizedAveraged);
-      return EmotionPrediction(
-        modelLabel: prediction.modelLabel,
-        confidence: prediction.confidence,
-        primaryEmotionId: prediction.primaryEmotionId,
-        labelProbabilities: prediction.labelProbabilities,
-        chunkCount: processedChunks,
-      );
-    } catch (_) {
-      return _neutralPrediction;
-    }
+    return classifySentence(text);
   }
 
-  Future<List<double>> _runInference(List<int> encodedIds) async {
+  Future<List<double>> _runInference(
+    _EmotionTokenizationResult tokenized,
+  ) async {
     if (!isReady) {
       await initialize();
     }
@@ -179,22 +128,24 @@ class EmotionInferenceService {
       return const [];
     }
 
-    final encoded = Int64List.fromList(encodedIds);
     OrtValue? inputIds;
     OrtValue? attentionMask;
     OrtValue? tokenTypeIds;
     Map<String, OrtValue> outputs = {};
 
     try {
-      inputIds = await OrtValue.fromList(encoded, [1, encoded.length]);
-      attentionMask = await OrtValue.fromList(
-        Int64List.fromList(List<int>.filled(encoded.length, 1)),
-        [1, encoded.length],
-      );
-      tokenTypeIds = await OrtValue.fromList(
-        Int64List.fromList(List<int>.filled(encoded.length, 0)),
-        [1, encoded.length],
-      );
+      inputIds = await OrtValue.fromList(tokenized.inputIds, [
+        1,
+        tokenized.inputIds.length,
+      ]);
+      attentionMask = await OrtValue.fromList(tokenized.attentionMask, [
+        1,
+        tokenized.attentionMask.length,
+      ]);
+      tokenTypeIds = await OrtValue.fromList(tokenized.tokenTypeIds, [
+        1,
+        tokenized.tokenTypeIds.length,
+      ]);
 
       outputs = await _session!.run({
         'input_ids': inputIds,
@@ -240,158 +191,84 @@ class EmotionInferenceService {
     );
   }
 
-  Future<List<String>> _loadLabelOrder() async {
+  _EmotionTokenizationResult _tokenize(String sentence) {
+    final encoding = _tokenizer!.encode(sentence.trim());
+    return _EmotionTokenizationResult(
+      inputIds: Int64List.fromList(
+        encoding.ids.map((value) => value.toInt()).toList(),
+      ),
+      attentionMask: Int64List.fromList(
+        encoding.attentionMask.map((value) => value.toInt()).toList(),
+      ),
+      tokenTypeIds: Int64List.fromList(
+        encoding.typeIds.map((value) => value.toInt()).toList(),
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> _loadConfig() async {
     try {
       final configRaw = await rootBundle.loadString(_configAssetPath);
-      final config = jsonDecode(configRaw) as Map<String, dynamic>;
-      final idToLabel = config['id2label'] as Map<String, dynamic>?;
-      if (idToLabel == null || idToLabel.isEmpty) {
-        return _defaultLabelOrder;
-      }
-      final sorted = idToLabel.entries.toList()
-        ..sort((a, b) => int.parse(a.key).compareTo(int.parse(b.key)));
-      return sorted.map((entry) => entry.value.toString()).toList();
+      return jsonDecode(configRaw) as Map<String, dynamic>;
     } catch (_) {
+      return const <String, dynamic>{};
+    }
+  }
+
+  int _resolveMaxSequenceLength(Map<String, dynamic> config) {
+    final maxPositionEmbeddings = config['max_position_embeddings'];
+    if (maxPositionEmbeddings is int && maxPositionEmbeddings > 0) {
+      return maxPositionEmbeddings;
+    }
+    return _defaultMaxSequenceLength;
+  }
+
+  List<String> _resolveLabelOrder(Map<String, dynamic> config) {
+    final idToLabel = config['id2label'] as Map<String, dynamic>?;
+    if (idToLabel == null || idToLabel.isEmpty) {
       return _defaultLabelOrder;
     }
+    final sorted = idToLabel.entries.toList()
+      ..sort((a, b) => int.parse(a.key).compareTo(int.parse(b.key)));
+    return sorted.map((entry) => entry.value.toString()).toList();
   }
 
-  List<int> _encodeSentence(String sentence) {
-    final vocab = _vocab ?? const <String, int>{};
-    final clsId = vocab['[CLS]'] ?? 101;
-    final sepId = vocab['[SEP]'] ?? 102;
-    final unkId = vocab['[UNK]'] ?? 100;
-
-    final tokenIds = <int>[clsId];
-
-    final words =
-        sentence.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim().split(' ')
-          ..removeWhere((word) => word.isEmpty);
-
-    for (final word in words) {
-      if (tokenIds.length >= _maxTokens - 1) {
-        break;
-      }
-      if (vocab.containsKey(word)) {
-        tokenIds.add(vocab[word]!);
-        continue;
-      }
-
-      final pieces = _wordPiece(word, vocab, unkId);
-      for (final piece in pieces) {
-        if (tokenIds.length >= _maxTokens - 1) {
-          break;
-        }
-        tokenIds.add(piece);
-      }
-      if (tokenIds.length >= _maxTokens - 1) {
-        break;
-      }
+  Future<Directory> _assetCacheDirectory() async {
+    final appSupportDir = await getApplicationSupportDirectory();
+    final dir = Directory(
+      '${appSupportDir.path}${Platform.pathSeparator}bert_emotion_assets',
+    );
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
     }
-
-    tokenIds.add(sepId);
-    return tokenIds;
+    return dir;
   }
 
-  List<int> _wordPiece(String word, Map<String, int> vocab, int unkId) {
-    final output = <int>[];
-    var start = 0;
-
-    while (start < word.length) {
-      String? currentPiece;
-      var end = word.length;
-
-      while (start < end) {
-        var piece = word.substring(start, end);
-        if (start > 0) {
-          piece = '##$piece';
-        }
-        if (vocab.containsKey(piece)) {
-          currentPiece = piece;
-          break;
-        }
-        end -= 1;
-      }
-
-      if (currentPiece == null) {
-        return [unkId];
-      }
-
-      output.add(vocab[currentPiece]!);
-      start = end;
+  Future<File> _copyAssetToAppSupport(
+    String assetPath, {
+    required String outputFileName,
+  }) async {
+    final cacheDir = await _assetCacheDirectory();
+    final file = File(
+      '${cacheDir.path}${Platform.pathSeparator}$outputFileName',
+    );
+    if (await file.exists()) {
+      return file;
     }
 
-    return output;
+    final data = await rootBundle.load(assetPath);
+    final bytes = data.buffer.asUint8List(
+      data.offsetInBytes,
+      data.lengthInBytes,
+    );
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
   }
 
-  List<String> _splitTextIntoChunks(String text) {
-    final vocab = _vocab ?? const <String, int>{};
-    final unkId = vocab['[UNK]'] ?? 100;
-    final words =
-        text.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim().split(' ')
-          ..removeWhere((word) => word.isEmpty);
-
-    if (words.isEmpty) {
-      return const [];
-    }
-
-    final maxContentTokens = _maxTokens - 2;
-    final chunks = <String>[];
-    final currentWords = <String>[];
-    var currentTokenCount = 0;
-
-    for (final word in words) {
-      final tokenCount = vocab.containsKey(word)
-          ? 1
-          : _wordPiece(word, vocab, unkId).length;
-
-      if (currentWords.isNotEmpty &&
-          currentTokenCount + tokenCount > maxContentTokens) {
-        chunks.add(currentWords.join(' '));
-        currentWords.clear();
-        currentTokenCount = 0;
-      }
-
-      currentWords.add(word);
-      currentTokenCount += tokenCount;
-
-      if (currentTokenCount >= maxContentTokens) {
-        chunks.add(currentWords.join(' '));
-        currentWords.clear();
-        currentTokenCount = 0;
-      }
-    }
-
-    if (currentWords.isNotEmpty) {
-      chunks.add(currentWords.join(' '));
-    }
-
-    return chunks;
-  }
-
-  List<double> _normalizeProbabilities(List<double> values) {
-    if (values.isEmpty) {
-      return values;
-    }
-    final sum = values.fold<double>(0, (acc, value) => acc + value);
-    if (sum <= 0) {
-      return List<double>.filled(values.length, 0);
-    }
-    return values.map((value) => value / sum).toList();
-  }
-
-  Future<Map<String, int>> _loadVocab() async {
-    final content = await rootBundle.loadString(_vocabAssetPath);
-    final lines = content.split(RegExp(r'\r?\n'));
-    final vocab = <String, int>{};
-    for (var i = 0; i < lines.length; i++) {
-      final token = lines[i].trim();
-      if (token.isEmpty) {
-        continue;
-      }
-      vocab[token] = i;
-    }
-    return vocab;
+  Future<void> dispose() async {
+    await _session?.close();
+    _session = null;
+    _tokenizer = null;
   }
 
   int _argmax(List<double> values) {
@@ -417,4 +294,16 @@ class EmotionInferenceService {
     }
     return exp.map((value) => value / sum).toList();
   }
+}
+
+class _EmotionTokenizationResult {
+  const _EmotionTokenizationResult({
+    required this.inputIds,
+    required this.attentionMask,
+    required this.tokenTypeIds,
+  });
+
+  final Int64List inputIds;
+  final Int64List attentionMask;
+  final Int64List tokenTypeIds;
 }

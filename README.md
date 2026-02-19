@@ -5,6 +5,7 @@ A simple Android app that analyzes your journal entries and highlights emotional
 ## On-device BERT emotion model
 
 The app now integrates on-device sentence emotion inference through `flutter_onnxruntime`.
+Tokenization is handled with `dart_bert_tokenizer` WordPiece vocabulary.
 
 Required model file for runtime:
 
@@ -17,6 +18,8 @@ Bundled assets currently expected by the app:
 - `bert-emotion/config.json`
 - `bert-emotion/tokenizer_config.json`
 - `bert-emotion/special_tokens_map.json`
+
+Runtime sequence length is read from `bert-emotion/config.json` (`max_position_embeddings`).
 
 Without `assets/models/bert-emotion.onnx`, the app still runs, but sentence classification falls back to neutral.
 
@@ -33,6 +36,9 @@ Generate ONNX in one command:
 ```bash
 python tools/export_bert_emotion_to_onnx.py --model-dir bert-emotion --output assets/models/bert-emotion.onnx --check
 ```
+
+By default, export uses `max_position_embeddings` from `bert-emotion/config.json` for the sample tensor length.
+Use `--max-length` only when you want to override it explicitly.
 
 This writes `assets/models/bert-emotion.onnx` with input names:
 

@@ -57,8 +57,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-length",
         type=int,
-        default=512,
-        help="Max sequence length used for export sample inputs.",
+        default=None,
+        help=(
+            "Max sequence length used for export sample inputs. "
+            "Defaults to max_position_embeddings from config.json."
+        ),
     )
     parser.add_argument(
         "--allow-download",
@@ -127,6 +130,7 @@ def export_to_onnx(
             },
             opset_version=opset,
             do_constant_folding=True,
+            external_data=False,
         )
     except ModuleNotFoundError as error:
         if error.name == "onnxscript":
@@ -157,6 +161,20 @@ def print_label_order(model_dir: Path) -> None:
         print(f"  {idx}: {label}")
 
 
+def resolve_export_max_length(model_dir: Path, max_length_override: int | None) -> int:
+    if max_length_override is not None and max_length_override > 0:
+        return max_length_override
+
+    config_path = model_dir / "config.json"
+    if config_path.exists():
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        max_position_embeddings = config.get("max_position_embeddings")
+        if isinstance(max_position_embeddings, int) and max_position_embeddings > 0:
+            return max_position_embeddings
+
+    return 512
+
+
 def main() -> None:
     args = parse_args()
     model_dir: Path = args.model_dir
@@ -166,9 +184,13 @@ def main() -> None:
         model_dir=model_dir,
         local_only=not args.allow_download,
     )
+    max_length = resolve_export_max_length(
+        model_dir=model_dir,
+        max_length_override=args.max_length,
+    )
     input_ids, attention_mask, token_type_ids = build_dummy_inputs(
         tokenizer=tokenizer,
-        max_length=args.max_length,
+        max_length=max_length,
     )
 
     export_to_onnx(
@@ -184,6 +206,7 @@ def main() -> None:
         maybe_check_onnx(output_path)
 
     print(f"ONNX export complete: {output_path.as_posix()}")
+    print(f"Export max_length: {max_length}")
     print_label_order(model_dir)
 
 

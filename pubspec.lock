@@ -113,6 +113,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.8"
+  dart_bert_tokenizer:
+    dependency: "direct main"
+    description:
+      name: dart_bert_tokenizer
+      sha256: c396ead1b53f4e43d6fe00cb903138068c41f6627ba35977b3069178326f1107
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.2"
   fake_async:
     dependency: transitive
     description:
