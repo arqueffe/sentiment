@@ -103,6 +103,13 @@ class EmotionInferenceService {
     }
 
     try {
+      if (!isReady) {
+        await initialize();
+      }
+      if (!isReady) {
+        return _neutralPrediction;
+      }
+
       final tokenized = _tokenize(sentence);
       final probabilities = await _runInference(tokenized);
       if (probabilities.isEmpty) {

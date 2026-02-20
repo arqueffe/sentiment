@@ -50,7 +50,7 @@ void main(List<String> args) {
   pubspec.writeAsStringSync(updated);
 
   stdout.writeln(
-    'Updated version: ${major}.${minor}.${patch}+${build} -> ${next.major}.${next.minor}.${next.patch}+${next.build}',
+    'Updated version: $major.$minor.$patch+$build -> ${next.major}.${next.minor}.${next.patch}+${next.build}',
   );
 }
 
