@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -66,14 +67,15 @@ class SentenceEmotionController extends StateNotifier<SentenceEmotionState> {
   Timer? _debounce;
 
   void setBody(String body) {
+    final previousState = state;
     state = state.copyWith(body: body, isClassifying: true);
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 250), () async {
       final targetBody = state.body;
       final completed = _extractCompletedSentences(targetBody);
       final annotations = <SentenceEmotionAnnotation>[];
-      final overallPrediction = await _inferenceService.classifyEntry(
-        targetBody,
+      final cachedPredictionsBySentence = _buildCachedPredictions(
+        previousState.annotations,
       );
 
       for (final span in completed) {
@@ -81,7 +83,13 @@ class SentenceEmotionController extends StateNotifier<SentenceEmotionState> {
         if (sentence.isEmpty) {
           continue;
         }
-        final prediction = await _inferenceService.classifySentence(sentence);
+        final cached = cachedPredictionsBySentence[sentence];
+        final cachedPrediction = cached == null || cached.isEmpty
+            ? null
+            : cached.removeFirst();
+        final prediction =
+            cachedPrediction ??
+            await _inferenceService.classifySentence(sentence);
         annotations.add(
           SentenceEmotionAnnotation(
             start: span.start,
@@ -95,16 +103,17 @@ class SentenceEmotionController extends StateNotifier<SentenceEmotionState> {
       }
 
       final counts = _buildCounts(annotations);
+      final overallSummary = _buildOverallSummary(annotations);
       if (state.body != targetBody) {
         return;
       }
       state = state.copyWith(
         annotations: annotations,
         counts: counts,
-        overallModelLabel: overallPrediction.modelLabel,
-        overallEmotionConfidence: overallPrediction.confidence,
-        overallEmotionChunkCount: overallPrediction.chunkCount,
-        overallDistribution: overallPrediction.labelProbabilities,
+        overallModelLabel: overallSummary.modelLabel,
+        overallEmotionConfidence: overallSummary.confidence,
+        overallEmotionChunkCount: overallSummary.chunkCount,
+        overallDistribution: overallSummary.distribution,
         isClassifying: false,
       );
     });
@@ -143,6 +152,77 @@ class SentenceEmotionController extends StateNotifier<SentenceEmotionState> {
     return spans;
   }
 
+  Map<String, Queue<EmotionPrediction>> _buildCachedPredictions(
+    List<SentenceEmotionAnnotation> annotations,
+  ) {
+    final cache = <String, Queue<EmotionPrediction>>{};
+    for (final annotation in annotations) {
+      final sentence = annotation.sentence.trim();
+      if (sentence.isEmpty) {
+        continue;
+      }
+      final bucket = cache.putIfAbsent(sentence, Queue.new);
+      bucket.add(
+        EmotionPrediction(
+          modelLabel: annotation.modelLabel,
+          primaryEmotionId: annotation.primaryEmotionId,
+          confidence: annotation.confidence,
+        ),
+      );
+    }
+    return cache;
+  }
+
+  _OverallEmotionSummary _buildOverallSummary(
+    List<SentenceEmotionAnnotation> annotations,
+  ) {
+    if (annotations.isEmpty) {
+      return const _OverallEmotionSummary(
+        modelLabel: '',
+        confidence: null,
+        chunkCount: 0,
+        distribution: {},
+      );
+    }
+
+    final labelCounts = <String, int>{};
+    final labelConfidenceSums = <String, double>{};
+    for (final annotation in annotations) {
+      final modelLabel = annotation.modelLabel;
+      labelCounts.update(modelLabel, (value) => value + 1, ifAbsent: () => 1);
+      labelConfidenceSums.update(
+        modelLabel,
+        (value) => value + annotation.confidence,
+        ifAbsent: () => annotation.confidence,
+      );
+    }
+
+    var dominantLabel = '';
+    var dominantCount = -1;
+    for (final entry in labelCounts.entries) {
+      if (entry.value > dominantCount) {
+        dominantLabel = entry.key;
+        dominantCount = entry.value;
+      }
+    }
+
+    final dominantConfidenceSum = labelConfidenceSums[dominantLabel] ?? 0;
+    final dominantConfidence = dominantCount > 0
+        ? dominantConfidenceSum / dominantCount
+        : null;
+    final total = annotations.length;
+    final distribution = {
+      for (final entry in labelCounts.entries) entry.key: entry.value / total,
+    };
+
+    return _OverallEmotionSummary(
+      modelLabel: dominantLabel,
+      confidence: dominantConfidence,
+      chunkCount: total,
+      distribution: distribution,
+    );
+  }
+
   @override
   void dispose() {
     _debounce?.cancel();
@@ -160,4 +240,18 @@ class _SentenceSpan {
   final int start;
   final int end;
   final String text;
+}
+
+class _OverallEmotionSummary {
+  const _OverallEmotionSummary({
+    required this.modelLabel,
+    required this.confidence,
+    required this.chunkCount,
+    required this.distribution,
+  });
+
+  final String modelLabel;
+  final double? confidence;
+  final int chunkCount;
+  final Map<String, double> distribution;
 }
