@@ -4,21 +4,21 @@ class EmotionLabelMapper {
   static const neutralLabel = 'neutral';
 
   static const Map<String, String?> _modelToPrimary = {
-    'sadness': 'sadness',
-    'anger': 'anger',
-    'love': 'trust',
-    'surprise': 'surprise',
-    'fear': 'fear',
-    'happiness': 'joy',
+    'sadness': 'sad',
+    'anger': 'angry',
+    'love': 'happy',
+    'surprise': 'surprised',
+    'fear': 'fearful',
+    'happiness': 'happy',
     'neutral': null,
-    'disgust': 'disgust',
-    'shame': 'sadness',
-    'guilt': 'sadness',
-    'sarcasm': 'disgust',
-    'excitement': 'anticipation',
-    'anxiety': 'fear',
-    'confusion': 'surprise',
-    'desire': 'anticipation',
+    'disgust': 'disgusted',
+    'shame': 'sad',
+    'guilt': 'sad',
+    'sarcasm': 'disgusted',
+    'excitement': 'happy',
+    'anxiety': 'fearful',
+    'confusion': 'surprised',
+    'desire': 'happy',
   };
 
   String? mapPrimaryId(String modelLabel) {
