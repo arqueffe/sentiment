@@ -7,6 +7,16 @@ class AnnotatedTextController extends TextEditingController {
   List<SentenceEmotionAnnotation> _annotations = const [];
   ValueChanged<SentenceEmotionAnnotation?>? onAnnotationHover;
 
+  bool _annotationMatchesCurrentText(SentenceEmotionAnnotation annotation) {
+    if (annotation.start < 0 || annotation.end > text.length) {
+      return false;
+    }
+    final currentSlice = text
+        .substring(annotation.start, annotation.end)
+        .trim();
+    return currentSlice == annotation.sentence.trim();
+  }
+
   SentenceEmotionAnnotation? annotationNearOffset(int offset) {
     if (_annotations.isEmpty || text.isEmpty) {
       return null;
@@ -20,6 +30,9 @@ class AnnotatedTextController extends TextEditingController {
     for (final candidate in candidates) {
       for (final annotation in _annotations) {
         if (annotation.primaryEmotionId == null) {
+          continue;
+        }
+        if (!_annotationMatchesCurrentText(annotation)) {
           continue;
         }
         if (candidate >= annotation.start && candidate < annotation.end) {
@@ -84,6 +97,9 @@ class AnnotatedTextController extends TextEditingController {
       if (annotation.start < currentIndex || annotation.end > text.length) {
         continue;
       }
+      if (!_annotationMatchesCurrentText(annotation)) {
+        continue;
+      }
       if (annotation.start > currentIndex) {
         children.add(
           TextSpan(
@@ -94,6 +110,7 @@ class AnnotatedTextController extends TextEditingController {
       }
 
       final primaryEmotionId = annotation.primaryEmotionId;
+      final sentenceText = text.substring(annotation.start, annotation.end);
       final sentenceStyle = primaryEmotionId == null
           ? baseStyle
           : baseStyle?.copyWith(
@@ -101,21 +118,19 @@ class AnnotatedTextController extends TextEditingController {
               decorationColor: emotionColor(context, primaryEmotionId),
               decorationThickness: 2,
             );
-      children.add(
-        TextSpan(
-          text: text.substring(annotation.start, annotation.end),
-          style: sentenceStyle,
-          mouseCursor: primaryEmotionId == null
-              ? MouseCursor.defer
-              : SystemMouseCursors.help,
-          onEnter: primaryEmotionId == null
-              ? null
-              : (_) => onAnnotationHover?.call(annotation),
-          onExit: primaryEmotionId == null
-              ? null
-              : (_) => onAnnotationHover?.call(null),
-        ),
-      );
+      if (primaryEmotionId == null) {
+        children.add(TextSpan(text: sentenceText, style: sentenceStyle));
+      } else {
+        children.add(
+          TextSpan(
+            text: sentenceText,
+            style: sentenceStyle,
+            mouseCursor: SystemMouseCursors.help,
+            onEnter: (_) => onAnnotationHover?.call(annotation),
+            onExit: (_) => onAnnotationHover?.call(null),
+          ),
+        );
+      }
       currentIndex = annotation.end;
     }
 

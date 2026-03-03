@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' as intl;
 
 import 'package:sentiment/models/emotion.dart';
 import 'package:sentiment/models/entry.dart';
@@ -8,6 +8,7 @@ import 'package:sentiment/state/providers.dart';
 import 'package:sentiment/ui/widgets/annotated_text_controller.dart';
 import 'package:sentiment/ui/widgets/emotion_picker.dart';
 import 'package:sentiment/ui/widgets/mood_chip.dart';
+import 'package:sentiment/ui/widgets/sentence_emotion_overlay.dart';
 import 'package:sentiment/ui/widgets/settings_button.dart';
 
 class EntryEditorScreen extends ConsumerStatefulWidget {
@@ -19,12 +20,16 @@ class EntryEditorScreen extends ConsumerStatefulWidget {
 
 class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   final _bodyController = AnnotatedTextController();
+  final _bodyScrollController = ScrollController();
   final _pageController = PageController();
+
+  static const _writeLineSpacing = 2.0;
+  static const _writeFieldContentPadding = EdgeInsets.fromLTRB(12, 12, 12, 12);
 
   EmotionSelection? _preMood;
   EmotionSelection? _postMood;
-  String? _hoveredEmotionLabel;
   int _stepIndex = 0;
+  bool _isAdvancing = false;
 
   static const _titles = [
     'Feel before',
@@ -36,40 +41,10 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   @override
   void initState() {
     super.initState();
-    _bodyController.onAnnotationHover = _onAnnotationHover;
-    _bodyController.addListener(_onBodySelectionChanged);
-  }
-
-  void _onBodySelectionChanged() {
-    final selection = _bodyController.selection;
-    if (!selection.isValid) {
-      return;
-    }
-
-    final annotation = _bodyController.annotationNearOffset(
-      selection.baseOffset,
-    );
-    _onAnnotationHover(annotation);
-  }
-
-  void _onAnnotationHover(SentenceEmotionAnnotation? annotation) {
-    final primaryEmotionId = annotation?.primaryEmotionId;
-    final nextLabel = primaryEmotionId == null
-        ? null
-        : (EmotionCatalog.byId(primaryEmotionId)?.label ?? primaryEmotionId);
-    if (_hoveredEmotionLabel == nextLabel || !mounted) {
-      return;
-    }
-    setState(() {
-      _hoveredEmotionLabel = nextLabel;
-    });
   }
 
   void _onBodyChanged(String value) {
     ref.read(sentenceEmotionControllerProvider.notifier).setBody(value);
-    if (_hoveredEmotionLabel != null) {
-      _hoveredEmotionLabel = null;
-    }
     if (!mounted) {
       return;
     }
@@ -78,8 +53,8 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
 
   @override
   void dispose() {
-    _bodyController.removeListener(_onBodySelectionChanged);
     _bodyController.dispose();
+    _bodyScrollController.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -127,11 +102,6 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   }
 
   Future<void> _goToStep(int step) async {
-    if (step == 2) {
-      ref
-          .read(sentenceEmotionControllerProvider.notifier)
-          .setBody(_bodyController.text);
-    }
     if (step != 1) {
       FocusManager.instance.primaryFocus?.unfocus();
     }
@@ -149,10 +119,31 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   }
 
   Future<void> _next() async {
+    if (_isAdvancing) {
+      return;
+    }
     if (_stepIndex >= 3) {
       await _save();
       return;
     }
+
+    if (_stepIndex == 1) {
+      setState(() {
+        _isAdvancing = true;
+      });
+      try {
+        await ref
+            .read(sentenceEmotionControllerProvider.notifier)
+            .prepareForNext(_bodyController.text);
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isAdvancing = false;
+          });
+        }
+      }
+    }
+
     await _goToStep(_stepIndex + 1);
   }
 
@@ -166,7 +157,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final now = DateFormat.yMMMMd().add_Hm().format(DateTime.now());
+    final now = intl.DateFormat.yMMMMd().add_Hm().format(DateTime.now());
     final hasText = _bodyController.text.trim().isNotEmpty;
     final sentenceEmotionState = ref.watch(sentenceEmotionControllerProvider);
     final annotations = sentenceEmotionState.annotations;
@@ -176,85 +167,109 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       }
       _bodyController.setAnnotations(annotations);
     });
-    final canContinue = _stepIndex == 1 ? hasText : true;
+    final canContinue = (_stepIndex == 1 ? hasText : true) && !_isAdvancing;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_stepIndex]),
         actions: const [SettingsButton()],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
-            child: LinearProgressIndicator(
-              value: (_stepIndex + 1) / 4,
-              borderRadius: BorderRadius.circular(12),
-            ),
+          Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+                child: LinearProgressIndicator(
+                  value: (_stepIndex + 1) / 4,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    _MoodStep(
+                      prompt: 'How do you feel before writing?',
+                      value: _preMood,
+                      role: 'Before',
+                      onPick: () => _pickMood(isPre: true),
+                    ),
+                    _WriteStep(
+                      bodyController: _bodyController,
+                      scrollController: _bodyScrollController,
+                      annotations: annotations,
+                      now: now,
+                      isClassifying: sentenceEmotionState.isClassifying,
+                      lineSpacing: _writeLineSpacing,
+                      contentPadding: _writeFieldContentPadding,
+                      onChanged: _onBodyChanged,
+                    ),
+                    _DetectedStatsStep(
+                      counts: sentenceEmotionState.counts,
+                      totalClassified: sentenceEmotionState.annotations.length,
+                      overallModelLabel: sentenceEmotionState.overallModelLabel,
+                      overallEmotionConfidence:
+                          sentenceEmotionState.overallEmotionConfidence,
+                      overallEmotionChunkCount:
+                          sentenceEmotionState.overallEmotionChunkCount,
+                      overallDistribution:
+                          sentenceEmotionState.overallDistribution,
+                    ),
+                    _MoodStep(
+                      prompt: 'How do you feel after writing?',
+                      value: _postMood,
+                      role: 'After',
+                      onPick: () => _pickMood(isPre: false),
+                      secondaryActionLabel: _preMood == null
+                          ? null
+                          : 'Use same as before',
+                      onSecondaryAction: _preMood == null
+                          ? null
+                          : () {
+                              setState(() {
+                                _postMood = _preMood;
+                              });
+                            },
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                child: Row(
+                  children: [
+                    OutlinedButton(
+                      onPressed: _isAdvancing ? null : _previous,
+                      child: Text(_stepIndex == 0 ? 'Cancel' : 'Back'),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: canContinue ? _next : null,
+                      child: Text(_stepIndex == 3 ? 'Save' : 'Next'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: PageView(
-              controller: _pageController,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                _MoodStep(
-                  prompt: 'How do you feel before writing?',
-                  value: _preMood,
-                  role: 'Before',
-                  onPick: () => _pickMood(isPre: true),
+          if (_isAdvancing)
+            Positioned.fill(
+              child: ColoredBox(
+                color: Theme.of(context).colorScheme.scrim.withAlpha(115),
+                child: const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 12),
+                      Text('Analyzing entry...'),
+                    ],
+                  ),
                 ),
-                _WriteStep(
-                  bodyController: _bodyController,
-                  now: now,
-                  isClassifying: sentenceEmotionState.isClassifying,
-                  hoveredEmotionLabel: _hoveredEmotionLabel,
-                  onChanged: _onBodyChanged,
-                ),
-                _DetectedStatsStep(
-                  counts: sentenceEmotionState.counts,
-                  totalClassified: sentenceEmotionState.annotations.length,
-                  overallModelLabel: sentenceEmotionState.overallModelLabel,
-                  overallEmotionConfidence:
-                      sentenceEmotionState.overallEmotionConfidence,
-                  overallEmotionChunkCount:
-                      sentenceEmotionState.overallEmotionChunkCount,
-                  overallDistribution: sentenceEmotionState.overallDistribution,
-                ),
-                _MoodStep(
-                  prompt: 'How do you feel after writing?',
-                  value: _postMood,
-                  role: 'After',
-                  onPick: () => _pickMood(isPre: false),
-                  secondaryActionLabel: _preMood == null
-                      ? null
-                      : 'Use same as before',
-                  onSecondaryAction: _preMood == null
-                      ? null
-                      : () {
-                          setState(() {
-                            _postMood = _preMood;
-                          });
-                        },
-                ),
-              ],
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-            child: Row(
-              children: [
-                OutlinedButton(
-                  onPressed: _previous,
-                  child: Text(_stepIndex == 0 ? 'Cancel' : 'Back'),
-                ),
-                const Spacer(),
-                FilledButton(
-                  onPressed: canContinue ? _next : null,
-                  child: Text(_stepIndex == 3 ? 'Save' : 'Next'),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -312,50 +327,151 @@ class _MoodStep extends StatelessWidget {
 class _WriteStep extends StatelessWidget {
   const _WriteStep({
     required this.bodyController,
+    required this.scrollController,
+    required this.annotations,
     required this.now,
     required this.isClassifying,
-    required this.hoveredEmotionLabel,
+    required this.lineSpacing,
+    required this.contentPadding,
     required this.onChanged,
   });
 
   final AnnotatedTextController bodyController;
+  final ScrollController scrollController;
+  final List<SentenceEmotionAnnotation> annotations;
   final String now;
   final bool isClassifying;
-  final String? hoveredEmotionLabel;
+  final double lineSpacing;
+  final EdgeInsets contentPadding;
   final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
+    final colorByEmotionId = emotionColorById(context, annotations);
+
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
         Text(now, style: Theme.of(context).textTheme.labelLarge),
         const SizedBox(height: 14),
-        TextField(
-          controller: bodyController,
-          onChanged: onChanged,
-          maxLines: 14,
-          autofocus: true,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: const InputDecoration(
-            hintText: 'Write freely...\nNothing leaves your device.',
-          ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final textStyle = Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(height: lineSpacing);
+            return Stack(
+              children: [
+                TextField(
+                  controller: bodyController,
+                  scrollController: scrollController,
+                  onChanged: onChanged,
+                  maxLines: 14,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.sentences,
+                  style: textStyle,
+                  strutStyle: StrutStyle(
+                    height: lineSpacing,
+                    forceStrutHeight: true,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Write freely...\nNothing leaves your device.',
+                    contentPadding: contentPadding,
+                  ),
+                ),
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: ListenableBuilder(
+                      listenable: scrollController,
+                      builder: (context, _) => CustomPaint(
+                        painter: SentenceEmotionOverlayPainter(
+                          text: bodyController.text,
+                          annotations: annotations,
+                          textStyle: textStyle ?? const TextStyle(),
+                          textDirection: Directionality.of(context),
+                          colorByEmotionId: colorByEmotionId,
+                          fallbackColor: Theme.of(context).colorScheme.primary,
+                          maxWidth: constraints.maxWidth,
+                          contentPadding: contentPadding,
+                          scrollOffset: scrollController.hasClients
+                              ? scrollController.offset
+                              : 0.0,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 10,
+                  bottom: 10,
+                  child: IgnorePointer(
+                    child: Opacity(
+                      opacity: 0.9,
+                      child: _InferenceCornerLogo(isSpinning: isClassifying),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
-        const SizedBox(height: 8),
-        Text(
-          isClassifying
-              ? 'Detecting emotion for completed sentences...'
-              : 'Completed sentences are underlined by detected emotion.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        if (hoveredEmotionLabel != null) ...[
-          const SizedBox(height: 4),
-          Text(
-            'Current sentence emotion: $hoveredEmotionLabel',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
       ],
+    );
+  }
+}
+
+class _InferenceCornerLogo extends StatefulWidget {
+  const _InferenceCornerLogo({required this.isSpinning});
+
+  final bool isSpinning;
+
+  @override
+  State<_InferenceCornerLogo> createState() => _InferenceCornerLogoState();
+}
+
+class _InferenceCornerLogoState extends State<_InferenceCornerLogo>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _rotationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _rotationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _syncAnimation();
+  }
+
+  @override
+  void didUpdateWidget(covariant _InferenceCornerLogo oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncAnimation();
+  }
+
+  void _syncAnimation() {
+    if (widget.isSpinning) {
+      _rotationController.repeat();
+      return;
+    }
+    _rotationController
+      ..stop()
+      ..value = 0;
+  }
+
+  @override
+  void dispose() {
+    _rotationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.square(
+      dimension: 16,
+      child: RotationTransition(
+        turns: _rotationController,
+        child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+      ),
     );
   }
 }

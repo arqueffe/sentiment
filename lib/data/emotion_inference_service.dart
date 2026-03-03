@@ -65,10 +65,12 @@ class EmotionInferenceService {
 
   OrtSession? _session;
   WordPieceTokenizer? _tokenizer;
+  WordPieceTokenizer? _entryChunkTokenizer;
   int _maxSequenceLength = _defaultMaxSequenceLength;
   List<String> _labelOrder = _defaultLabelOrder;
 
-  bool get isReady => _session != null && _tokenizer != null;
+  bool get isReady =>
+      _session != null && _tokenizer != null && _entryChunkTokenizer != null;
 
   Future<void> initialize() async {
     if (isReady) {
@@ -86,6 +88,9 @@ class EmotionInferenceService {
     final tokenizer = await WordPieceTokenizer.fromVocabFile(vocabFile.path);
     tokenizer.enableTruncation(maxLength: _maxSequenceLength);
     tokenizer.enablePadding(length: _maxSequenceLength);
+    final entryChunkTokenizer = await WordPieceTokenizer.fromVocabFile(
+      vocabFile.path,
+    );
 
     final modelFile = await _copyAssetToAppSupport(
       _modelAssetPath,
@@ -94,6 +99,7 @@ class EmotionInferenceService {
     final session = await _runtime.createSession(modelFile.path);
 
     _tokenizer = tokenizer;
+    _entryChunkTokenizer = entryChunkTokenizer;
     _session = session;
   }
 
@@ -122,7 +128,137 @@ class EmotionInferenceService {
   }
 
   Future<EmotionPrediction> classifyEntry(String text) async {
-    return classifySentence(text);
+    final entryText = text.trim();
+    if (entryText.isEmpty) {
+      return const EmotionPrediction(
+        modelLabel: '',
+        confidence: 0,
+        primaryEmotionId: null,
+        labelProbabilities: {},
+        chunkCount: 0,
+      );
+    }
+
+    try {
+      if (!isReady) {
+        await initialize();
+      }
+      if (!isReady) {
+        return _neutralPrediction;
+      }
+
+      final chunks = _splitEntryIntoMaxTokenChunks(entryText);
+      if (chunks.isEmpty) {
+        return _neutralPrediction;
+      }
+
+      final summedProbabilities = List<double>.filled(_labelOrder.length, 0);
+      var validChunkCount = 0;
+
+      for (final chunk in chunks) {
+        final tokenized = _tokenize(chunk);
+        final probabilities = await _runInference(tokenized);
+        if (probabilities.isEmpty) {
+          continue;
+        }
+        validChunkCount++;
+        for (
+          var i = 0;
+          i < probabilities.length && i < summedProbabilities.length;
+          i++
+        ) {
+          summedProbabilities[i] += probabilities[i];
+        }
+      }
+
+      if (validChunkCount == 0) {
+        return _neutralPrediction;
+      }
+
+      final averaged = summedProbabilities
+          .map((value) => value / validChunkCount)
+          .toList(growable: false);
+      final basePrediction = _predictionFromProbabilities(averaged);
+      return EmotionPrediction(
+        modelLabel: basePrediction.modelLabel,
+        confidence: basePrediction.confidence,
+        primaryEmotionId: basePrediction.primaryEmotionId,
+        labelProbabilities: basePrediction.labelProbabilities,
+        chunkCount: validChunkCount,
+      );
+    } catch (_) {
+      return _neutralPrediction;
+    }
+  }
+
+  List<String> _splitEntryIntoMaxTokenChunks(String text) {
+    final chunks = <String>[];
+    var start = 0;
+
+    while (start < text.length) {
+      while (start < text.length && _isWhitespace(text.codeUnitAt(start))) {
+        start++;
+      }
+      if (start >= text.length) {
+        break;
+      }
+
+      var low = start + 1;
+      var high = text.length;
+      var bestEnd = start;
+
+      while (low <= high) {
+        final mid = (low + high) >> 1;
+        final candidate = text.substring(start, mid).trim();
+        if (candidate.isEmpty) {
+          low = mid + 1;
+          continue;
+        }
+
+        final tokenCount = _entryChunkTokenizer!.encode(candidate).ids.length;
+        if (tokenCount <= _maxSequenceLength) {
+          bestEnd = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+
+      if (bestEnd <= start) {
+        break;
+      }
+
+      var chunkEnd = bestEnd;
+      if (chunkEnd < text.length) {
+        var backtrack = chunkEnd;
+        while (backtrack > start &&
+            !_isWhitespace(text.codeUnitAt(backtrack - 1))) {
+          backtrack--;
+        }
+        if (backtrack > start) {
+          chunkEnd = backtrack;
+        }
+      }
+
+      final chunk = text.substring(start, chunkEnd).trim();
+      if (chunk.isNotEmpty) {
+        chunks.add(chunk);
+      }
+
+      if (chunkEnd <= start) {
+        break;
+      }
+      start = chunkEnd;
+    }
+
+    return chunks;
+  }
+
+  bool _isWhitespace(int codeUnit) {
+    return codeUnit == 0x20 ||
+        codeUnit == 0x09 ||
+        codeUnit == 0x0A ||
+        codeUnit == 0x0D;
   }
 
   Future<List<double>> _runInference(
@@ -276,6 +412,7 @@ class EmotionInferenceService {
     await _session?.close();
     _session = null;
     _tokenizer = null;
+    _entryChunkTokenizer = null;
   }
 
   int _argmax(List<double> values) {
