@@ -15,7 +15,18 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
   final _confirmPasswordController = TextEditingController();
   bool _enableBiometric = false;
   bool _isSubmitting = false;
+  bool _didPrecacheLogo = false;
   String? _error;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didPrecacheLogo) {
+      return;
+    }
+    _didPrecacheLogo = true;
+    precacheImage(const AssetImage('assets/images/logo.apng'), context);
+  }
 
   @override
   void dispose() {
@@ -108,6 +119,9 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
     final isSetup = authState.hasPassword;
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    const logoSize = 200.0;
+    final logoCacheSize = (logoSize * MediaQuery.devicePixelRatioOf(context))
+        .round();
 
     return Scaffold(
       body: SafeArea(
@@ -120,10 +134,13 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Image.asset(
-                    'assets/images/logo.png',
-                    width: 200,
-                    height: 200,
+                    'assets/images/logo.apng',
+                    width: logoSize,
+                    height: logoSize,
+                    cacheWidth: logoCacheSize,
+                    cacheHeight: logoCacheSize,
                     fit: BoxFit.contain,
+                    gaplessPlayback: true,
                   ),
                   const SizedBox(height: 20),
                   Card(

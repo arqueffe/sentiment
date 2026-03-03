@@ -74,6 +74,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/logo.png
+    - assets/images/logo.apng
     - assets/models/bert-emotion.onnx
     - bert-emotion/config.json
     - bert-emotion/special_tokens_map.json
