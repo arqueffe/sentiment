@@ -12,19 +12,34 @@ class EntryRepository {
   static const _boxName = 'entries';
 
   Box<JournalEntry>? _box;
-  final Completer<void> _openCompleter = Completer<void>();
+  Completer<void> _openCompleter = Completer<void>();
+  Future<void>? _openingFuture;
+  Future<void>? _closingFuture;
 
   Future<void> open(Uint8List encryptionKey) async {
+    final closingFuture = _closingFuture;
+    if (closingFuture != null) {
+      await closingFuture;
+    }
     if (_box?.isOpen ?? false) {
       return;
     }
-    HiveAdapters.register();
-    _box = await Hive.openBox<JournalEntry>(
-      _boxName,
-      encryptionCipher: HiveAesCipher(encryptionKey),
-    );
-    if (!_openCompleter.isCompleted) {
-      _openCompleter.complete();
+    final openingFuture = _openingFuture ??= _doOpen(encryptionKey);
+    await openingFuture;
+  }
+
+  Future<void> _doOpen(Uint8List encryptionKey) async {
+    try {
+      HiveAdapters.register();
+      _box = await Hive.openBox<JournalEntry>(
+        _boxName,
+        encryptionCipher: HiveAesCipher(encryptionKey),
+      );
+      if (!_openCompleter.isCompleted) {
+        _openCompleter.complete();
+      }
+    } finally {
+      _openingFuture = null;
     }
   }
 
@@ -32,31 +47,60 @@ class EntryRepository {
 
   Stream<List<JournalEntry>> watchEntries() async* {
     await _openCompleter.future;
-    yield _sorted(_box!.values.toList());
-    yield* _box!.watch().map((_) => _sorted(_box!.values.toList()));
+    final box = _requireOpenBox();
+    yield _sorted(box.values.toList());
+    yield* box.watch().map((_) => _sorted(box.values.toList()));
   }
 
   Future<void> addEntry(JournalEntry entry) async {
     await _openCompleter.future;
-    await _box?.put(entry.id, entry);
+    await _requireOpenBox().put(entry.id, entry);
   }
 
   Future<void> deleteEntry(String id) async {
     await _openCompleter.future;
-    await _box?.delete(id);
+    await _requireOpenBox().delete(id);
   }
 
   Future<void> upsertEntries(Iterable<JournalEntry> entries) async {
     await _openCompleter.future;
     final map = {for (final entry in entries) entry.id: entry};
-    await _box?.putAll(map);
+    await _requireOpenBox().putAll(map);
   }
 
   Future<void> close() async {
-    if (_box?.isOpen ?? false) {
-      await _box?.close();
+    if (_box == null && _openingFuture == null) {
+      return;
     }
+    final closingFuture = _closeInternal();
+    _closingFuture = closingFuture;
+    await closingFuture;
+    if (identical(_closingFuture, closingFuture)) {
+      _closingFuture = null;
+    }
+  }
+
+  Future<void> _closeInternal() async {
+    final openingFuture = _openingFuture;
+    if (openingFuture != null) {
+      await openingFuture;
+    }
+
+    final box = _box;
     _box = null;
+    _openCompleter = Completer<void>();
+
+    if (box?.isOpen ?? false) {
+      await box!.close();
+    }
+  }
+
+  Box<JournalEntry> _requireOpenBox() {
+    final box = _box;
+    if (box == null || !box.isOpen) {
+      throw StateError('Entries box is not open.');
+    }
+    return box;
   }
 
   List<JournalEntry> _sorted(List<JournalEntry> entries) {
