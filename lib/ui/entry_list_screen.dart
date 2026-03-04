@@ -17,13 +17,45 @@ class EntryListScreen extends ConsumerStatefulWidget {
 class _EntryListScreenState extends ConsumerState<EntryListScreen> {
   DateTime? _selectedDay;
 
+  int _dateKey(DateTime date) {
+    return date.year * 10000 + date.month * 100 + date.day;
+  }
+
   Future<void> _pickDate() async {
+    final items = await ref.read(entriesProvider.future);
+    if (!mounted || items.isEmpty) {
+      return;
+    }
+
     final now = DateTime.now();
+    final selectableDateKeys = items
+        .map((entry) => _dateKey(entry.createdAt))
+        .toSet();
+    final sortedEntryDates =
+        items
+            .map(
+              (entry) => DateTime(
+                entry.createdAt.year,
+                entry.createdAt.month,
+                entry.createdAt.day,
+              ),
+            )
+            .toList()
+          ..sort();
+
+    final initialCandidate = _selectedDay ?? now;
+    final initialDate = selectableDateKeys.contains(_dateKey(initialCandidate))
+        ? initialCandidate
+        : sortedEntryDates.last;
+
     final date = await showDatePicker(
       context: context,
-      initialDate: _selectedDay ?? now,
-      firstDate: DateTime(2018),
+      initialDate: initialDate,
+      firstDate: sortedEntryDates.first,
       lastDate: now,
+      selectableDayPredicate: (date) {
+        return selectableDateKeys.contains(_dateKey(date));
+      },
     );
     if (date == null) {
       return;

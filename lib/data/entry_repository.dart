@@ -52,6 +52,13 @@ class EntryRepository {
     await _box?.putAll(map);
   }
 
+  Future<void> close() async {
+    if (_box?.isOpen ?? false) {
+      await _box?.close();
+    }
+    _box = null;
+  }
+
   List<JournalEntry> _sorted(List<JournalEntry> entries) {
     entries.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return entries;

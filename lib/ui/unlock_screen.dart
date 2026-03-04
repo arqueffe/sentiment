@@ -80,8 +80,11 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen>
     }
 
     if (!success) {
+      final cooldown = controller.unlockCooldownRemaining;
       setState(() {
-        _error = 'Invalid password';
+        _error = cooldown == null
+            ? 'Invalid password'
+            : 'Too many attempts. Try again in ${cooldown.inSeconds}s';
       });
     }
 

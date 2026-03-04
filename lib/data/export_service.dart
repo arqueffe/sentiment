@@ -6,6 +6,8 @@ import 'package:file_selector/file_selector.dart';
 import 'package:sentiment/models/entry.dart';
 
 class ExportService {
+  static const _maxImportBytes = 2 * 1024 * 1024;
+
   Future<void> exportJson(List<JournalEntry> entries) async {
     final json = jsonEncode({
       'version': 2,
@@ -35,11 +37,32 @@ class ExportService {
     if (file == null) {
       return null;
     }
-    final content = await file.readAsString();
-    final map = jsonDecode(content) as Map<String, dynamic>;
-    final items = map['entries'] as List<dynamic>;
-    return items
-        .map((entry) => JournalEntry.fromJson(entry as Map<String, dynamic>))
-        .toList();
+
+    final size = await file.length();
+    if (size > _maxImportBytes) {
+      return null;
+    }
+
+    try {
+      final content = await file.readAsString();
+      final decoded = jsonDecode(content);
+      if (decoded is! Map) {
+        return null;
+      }
+      final map = Map<String, dynamic>.from(decoded);
+      final entriesValue = map['entries'];
+      if (entriesValue is! List) {
+        return null;
+      }
+
+      return entriesValue.map((entry) {
+        if (entry is! Map) {
+          throw const FormatException('Invalid entry structure');
+        }
+        return JournalEntry.fromJson(Map<String, dynamic>.from(entry));
+      }).toList();
+    } on FormatException {
+      return null;
+    }
   }
 }

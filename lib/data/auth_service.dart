@@ -56,6 +56,7 @@ class AuthService {
     }
     final didAuth = await _localAuth.authenticate(
       localizedReason: 'Unlock your journal',
+      options: const AuthenticationOptions(stickyAuth: true),
     );
     if (!didAuth) {
       return null;
@@ -75,6 +76,7 @@ class AuthService {
 
     final didAuth = await _localAuth.authenticate(
       localizedReason: 'Enable biometric unlock',
+      options: const AuthenticationOptions(stickyAuth: true),
     );
     if (!didAuth) {
       return false;

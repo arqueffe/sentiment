@@ -47,9 +47,27 @@ class AuthController extends StateNotifier<AuthState> {
 
   final AuthService _authService;
   final EncryptionService _encryption;
+  static const _maxFailedUnlockAttempts = 5;
+  static const _unlockCooldownDuration = Duration(seconds: 30);
+
   Uint8List? _masterKey;
+  int _failedUnlockAttempts = 0;
+  DateTime? _unlockBlockedUntil;
 
   Uint8List? get masterKey => _masterKey;
+
+  Duration? get unlockCooldownRemaining {
+    final blockedUntil = _unlockBlockedUntil;
+    if (blockedUntil == null) {
+      return null;
+    }
+    final remaining = blockedUntil.difference(DateTime.now());
+    if (remaining.isNegative || remaining == Duration.zero) {
+      _unlockBlockedUntil = null;
+      return null;
+    }
+    return remaining;
+  }
 
   Future<void> initialize() async {
     final hasPassword = await _authService.hasPassword();
@@ -87,6 +105,10 @@ class AuthController extends StateNotifier<AuthState> {
     String password, {
     bool? enableBiometric,
   }) async {
+    if (unlockCooldownRemaining != null) {
+      return false;
+    }
+
     try {
       _masterKey = Uint8List.fromList(
         await _authService.unlockWithPassword(password),
@@ -103,8 +125,15 @@ class AuthController extends StateNotifier<AuthState> {
         status: AuthStatus.unlocked,
         canBiometric: canBiometric,
       );
+      _failedUnlockAttempts = 0;
+      _unlockBlockedUntil = null;
       return true;
     } on EncryptionException {
+      _failedUnlockAttempts += 1;
+      if (_failedUnlockAttempts >= _maxFailedUnlockAttempts) {
+        _unlockBlockedUntil = DateTime.now().add(_unlockCooldownDuration);
+        _failedUnlockAttempts = 0;
+      }
       return false;
     }
   }
@@ -156,5 +185,10 @@ class AuthController extends StateNotifier<AuthState> {
     await _authService.disableBiometrics();
     final canBiometric = await _authService.canUseBiometrics();
     state = state.copyWith(canBiometric: canBiometric);
+  }
+
+  void lock() {
+    _masterKey = null;
+    state = state.copyWith(status: AuthStatus.locked);
   }
 }
