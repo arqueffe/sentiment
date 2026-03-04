@@ -16,6 +16,7 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen>
   final _confirmPasswordController = TextEditingController();
   late final AnimationController _logoController;
   bool _logoPlayed = false;
+  bool _logoReady = false;
   bool _enableBiometric = false;
   bool _isSubmitting = false;
   String? _error;
@@ -136,17 +137,40 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen>
                   SizedBox(
                     width: logoSize,
                     height: logoSize,
-                    child: AvifAnimation(
-                      controller: _logoController,
-                      image: const AssetAvifImage('assets/images/logo.avif'),
-                      fit: BoxFit.contain,
-                      onLoaded: (duration, fps) {
-                        if (_logoPlayed || !mounted) return;
-                        _logoPlayed = true;
-                        _logoController
-                          ..duration = duration
-                          ..forward(from: 0);
-                      },
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        AnimatedOpacity(
+                          opacity: _logoReady ? 0 : 1,
+                          duration: const Duration(milliseconds: 180),
+                          child: Image.asset(
+                            'assets/images/logo.png',
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                        AnimatedOpacity(
+                          opacity: _logoReady ? 1 : 0,
+                          duration: const Duration(milliseconds: 180),
+                          child: AvifAnimation(
+                            controller: _logoController,
+                            image: const AssetAvifImage(
+                              'assets/images/logo.avif',
+                            ),
+                            fit: BoxFit.contain,
+                            onLoaded: (duration, fps) {
+                              if (!mounted) return;
+                              setState(() {
+                                _logoReady = true;
+                              });
+                              if (_logoPlayed) return;
+                              _logoPlayed = true;
+                              _logoController
+                                ..duration = duration
+                                ..forward(from: 0);
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 20),

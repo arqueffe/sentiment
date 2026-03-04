@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import 'package:sentiment/models/entry.dart';
 import 'package:sentiment/models/emotion.dart';
+import 'package:sentiment/state/providers.dart';
 import 'package:sentiment/ui/widgets/mood_chip.dart';
 import 'package:sentiment/ui/widgets/sentence_emotion_overlay.dart';
 import 'package:sentiment/ui/widgets/settings_button.dart';
 
-class EntryDetailScreen extends StatelessWidget {
+class EntryDetailScreen extends ConsumerWidget {
   const EntryDetailScreen({super.key, required this.entry});
 
   static const _bodyLineSpacing = 2.5;
@@ -16,7 +18,7 @@ class EntryDetailScreen extends StatelessWidget {
   final JournalEntry entry;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final annotationCount = entry.sentenceEmotionAnnotations.length;
     final detectedCounts = _detectedEmotionCounts(entry);
     final uniqueDetectedCount = detectedCounts.length;
@@ -40,7 +42,14 @@ class EntryDetailScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Entry'),
-        actions: const [SettingsButton()],
+        actions: [
+          IconButton(
+            tooltip: 'Delete entry',
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () => _confirmAndDelete(context, ref),
+          ),
+          const SettingsButton(),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -131,6 +140,47 @@ class EntryDetailScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmAndDelete(BuildContext context, WidgetRef ref) async {
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) {
+            final colorScheme = Theme.of(context).colorScheme;
+            return AlertDialog(
+              title: const Text('Delete entry?'),
+              content: const Text(
+                'This is a permanent deletion. This action cannot be undone.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: colorScheme.error,
+                    foregroundColor: colorScheme.onError,
+                  ),
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Delete'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+
+    if (!confirmed) {
+      return;
+    }
+
+    await ref.read(entryControllerProvider).deleteEntry(entry.id);
+    if (!context.mounted) {
+      return;
+    }
+    Navigator.of(context).pop();
   }
 
   String? _dominantDetectedEmotionId(JournalEntry entry) {
