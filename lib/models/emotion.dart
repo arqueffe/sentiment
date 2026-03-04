@@ -52,9 +52,9 @@ class EmotionCatalog {
         ),
         EmotionNode(
           id: 'sad_despair',
-          label: 'Despair',
+          label: 'Despairing',
           children: [
-            EmotionNode(id: 'sad_despair_grief', label: 'Grief'),
+            EmotionNode(id: 'sad_despair_grief', label: 'Grieving'),
             EmotionNode(id: 'sad_despair_powerless', label: 'Powerless'),
           ],
         ),
@@ -185,7 +185,7 @@ class EmotionCatalog {
         ),
         EmotionNode(
           id: 'disgusted_dissapointed',
-          label: 'Dissapointed',
+          label: 'Disappointed',
           children: [
             EmotionNode(
               id: 'disgusted_dissapointed_appalled',
@@ -359,7 +359,7 @@ class EmotionCatalog {
           id: 'bad_bored',
           label: 'Bored',
           children: [
-            EmotionNode(id: 'bad_bored_indefferent', label: 'Indefferent'),
+            EmotionNode(id: 'bad_bored_indefferent', label: 'Indifferent'),
             EmotionNode(id: 'bad_bored_apathetic', label: 'Apathetic'),
           ],
         ),
@@ -384,7 +384,7 @@ class EmotionCatalog {
         ),
         EmotionNode(
           id: 'bad_tied',
-          label: 'Tied',
+          label: 'Tired',
           children: [
             EmotionNode(id: 'bad_tied_sleepy', label: 'Sleepy'),
             EmotionNode(id: 'bad_tied_unfocused', label: 'Unfocused'),
@@ -420,7 +420,7 @@ class EmotionCatalog {
           label: 'Amazed',
           children: [
             EmotionNode(id: 'surprised_amazed_astonished', label: 'Astonished'),
-            EmotionNode(id: 'surprised_amazed_awe', label: 'Awe'),
+            EmotionNode(id: 'surprised_amazed_awe', label: 'Awestruck'),
           ],
         ),
         EmotionNode(

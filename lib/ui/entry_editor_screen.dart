@@ -201,6 +201,13 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
                       value: _preMood,
                       role: 'Before',
                       onPick: () => _pickMood(isPre: true),
+                      onClear: _preMood == null
+                          ? null
+                          : () {
+                              setState(() {
+                                _preMood = null;
+                              });
+                            },
                     ),
                     _WriteStep(
                       bodyController: _bodyController,
@@ -229,6 +236,13 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
                       value: _postMood,
                       role: 'After',
                       onPick: () => _pickMood(isPre: false),
+                      onClear: _postMood == null
+                          ? null
+                          : () {
+                              setState(() {
+                                _postMood = null;
+                              });
+                            },
                       secondaryActionLabel: _preMood == null
                           ? null
                           : 'Use same as before',
@@ -289,6 +303,7 @@ class _MoodStep extends StatelessWidget {
     required this.value,
     required this.role,
     required this.onPick,
+    this.onClear,
     this.secondaryActionLabel,
     this.onSecondaryAction,
   });
@@ -297,6 +312,7 @@ class _MoodStep extends StatelessWidget {
   final EmotionSelection? value;
   final String role;
   final VoidCallback onPick;
+  final VoidCallback? onClear;
   final String? secondaryActionLabel;
   final VoidCallback? onSecondaryAction;
 
@@ -318,6 +334,14 @@ class _MoodStep extends StatelessWidget {
           role: role,
           onTap: onPick,
         ),
+        if (onClear != null) ...[
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: onClear,
+            icon: const Icon(Icons.close_rounded),
+            label: const Text('Remove feeling'),
+          ),
+        ],
         if (secondaryActionLabel != null && onSecondaryAction != null) ...[
           const SizedBox(height: 8),
           TextButton.icon(

@@ -335,8 +335,6 @@ class _EmotionPickerSheetState extends State<EmotionPickerSheet>
                     ),
                   ),
                 ),
-                const SizedBox(height: 6),
-                _RingLegend(primary: _primary, secondary: _secondary),
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -370,25 +368,6 @@ class _EmotionPickerSheetState extends State<EmotionPickerSheet>
           ),
         ),
       ),
-    );
-  }
-}
-
-class _RingLegend extends StatelessWidget {
-  const _RingLegend({required this.primary, required this.secondary});
-
-  final EmotionNode? primary;
-  final EmotionNode? secondary;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      primary == null
-          ? 'Selection: none'
-          : secondary == null
-          ? 'Selection: ${primary!.label}'
-          : 'Selection: ${primary!.label} · ${secondary!.label}',
-      style: Theme.of(context).textTheme.bodySmall,
     );
   }
 }
@@ -546,26 +525,49 @@ class _EmotionWheelPainter extends CustomPainter {
           center.dy + labelRadius * math.sin(mid),
         );
 
-        final text = node.label;
-        final textPainter = TextPainter(
-          text: TextSpan(
-            text: text,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: muted
-                  ? Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.82)
-                  : Theme.of(context).colorScheme.onPrimary,
+        final baseStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: Colors.black,
+        );
+
+        final arcWidth = labelRadius * sweep;
+        final maxLabelWidth = math.max(18.0, arcWidth - 6);
+        final maxLabelHeight = math.max(14.0, strokeWidth - 6);
+
+        var fontSize = (baseStyle?.fontSize ?? 11.0).clamp(8.0, 13.0);
+        late TextPainter textPainter;
+
+        while (true) {
+          textPainter = TextPainter(
+            text: TextSpan(
+              text: node.label,
+              style: baseStyle?.copyWith(fontSize: fontSize),
             ),
-          ),
-          maxLines: 1,
-          textDirection: TextDirection.ltr,
-        )..layout(maxWidth: strokeWidth * 1.5);
+            maxLines: 2,
+            textAlign: TextAlign.center,
+            textDirection: TextDirection.ltr,
+          )..layout(maxWidth: maxLabelWidth);
+
+          final tooTall = textPainter.height > maxLabelHeight;
+          final exceeded = textPainter.didExceedMaxLines;
+          if ((!tooTall && !exceeded) || fontSize <= 8.0) {
+            break;
+          }
+          fontSize -= 0.5;
+        }
 
         canvas.save();
         canvas.translate(labelOffset.dx, labelOffset.dy);
-        canvas.rotate(mid + math.pi / 2);
+        var textRotation = mid + math.pi / 2;
+        final normalizedRotation =
+            ((textRotation % (2 * math.pi)) + (2 * math.pi)) % (2 * math.pi);
+        final isUpsideDown =
+            normalizedRotation > math.pi / 2 &&
+            normalizedRotation < 3 * math.pi / 2;
+        if (isUpsideDown) {
+          textRotation += math.pi;
+        }
+        canvas.rotate(textRotation);
         textPainter.paint(
           canvas,
           Offset(-textPainter.width / 2, -textPainter.height / 2),
