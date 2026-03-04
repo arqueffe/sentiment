@@ -48,6 +48,7 @@ dependencies:
   path_provider: ^2.1.4
   flutter_onnxruntime: ^1.6.2
   dart_bert_tokenizer: ^1.0.2
+  flutter_avif: ^3.1.0
 
 dev_dependencies:
   flutter_test:
@@ -74,7 +75,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/logo.png
-    - assets/images/logo.apng
+    - assets/images/logo.avif
     - assets/models/bert-emotion.onnx
     - bert-emotion/config.json
     - bert-emotion/special_tokens_map.json

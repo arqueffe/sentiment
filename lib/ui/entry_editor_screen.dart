@@ -25,6 +25,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
 
   static const _writeLineSpacing = 2.0;
   static const _writeFieldContentPadding = EdgeInsets.fromLTRB(12, 12, 12, 12);
+  static const _mobileEditorBadgeVerticalOffset = 6.0;
 
   EmotionSelection? _preMood;
   EmotionSelection? _postMood;
@@ -168,6 +169,11 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       _bodyController.setAnnotations(annotations);
     });
     final canContinue = (_stepIndex == 1 ? hasText : true) && !_isAdvancing;
+    final editorBadgeVerticalOffset = switch (Theme.of(context).platform) {
+      TargetPlatform.android ||
+      TargetPlatform.iOS => _mobileEditorBadgeVerticalOffset,
+      _ => 0.0,
+    };
 
     return Scaffold(
       appBar: AppBar(
@@ -204,6 +210,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
                       isClassifying: sentenceEmotionState.isClassifying,
                       lineSpacing: _writeLineSpacing,
                       contentPadding: _writeFieldContentPadding,
+                      badgeVerticalOffset: editorBadgeVerticalOffset,
                       onChanged: _onBodyChanged,
                     ),
                     _DetectedStatsStep(
@@ -333,6 +340,7 @@ class _WriteStep extends StatelessWidget {
     required this.isClassifying,
     required this.lineSpacing,
     required this.contentPadding,
+    required this.badgeVerticalOffset,
     required this.onChanged,
   });
 
@@ -343,6 +351,7 @@ class _WriteStep extends StatelessWidget {
   final bool isClassifying;
   final double lineSpacing;
   final EdgeInsets contentPadding;
+  final double badgeVerticalOffset;
   final ValueChanged<String> onChanged;
 
   @override
@@ -395,6 +404,7 @@ class _WriteStep extends StatelessWidget {
                           scrollOffset: scrollController.hasClients
                               ? scrollController.offset
                               : 0.0,
+                          badgeVerticalOffset: badgeVerticalOffset,
                         ),
                       ),
                     ),

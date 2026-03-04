@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:flutter_avif/flutter_avif.dart';
 import 'package:sentiment/state/providers.dart';
 
 class UnlockScreen extends ConsumerStatefulWidget {
@@ -10,26 +10,25 @@ class UnlockScreen extends ConsumerStatefulWidget {
   ConsumerState<UnlockScreen> createState() => _UnlockScreenState();
 }
 
-class _UnlockScreenState extends ConsumerState<UnlockScreen> {
+class _UnlockScreenState extends ConsumerState<UnlockScreen>
+    with SingleTickerProviderStateMixin {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  late final AnimationController _logoController;
+  bool _logoPlayed = false;
   bool _enableBiometric = false;
   bool _isSubmitting = false;
-  bool _didPrecacheLogo = false;
   String? _error;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_didPrecacheLogo) {
-      return;
-    }
-    _didPrecacheLogo = true;
-    precacheImage(const AssetImage('assets/images/logo.apng'), context);
+  void initState() {
+    super.initState();
+    _logoController = AnimationController(vsync: this);
   }
 
   @override
   void dispose() {
+    _logoController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -120,8 +119,6 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     const logoSize = 200.0;
-    final logoCacheSize = (logoSize * MediaQuery.devicePixelRatioOf(context))
-        .round();
 
     return Scaffold(
       body: SafeArea(
@@ -133,14 +130,21 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Image.asset(
-                    'assets/images/logo.apng',
+                  SizedBox(
                     width: logoSize,
                     height: logoSize,
-                    cacheWidth: logoCacheSize,
-                    cacheHeight: logoCacheSize,
-                    fit: BoxFit.contain,
-                    gaplessPlayback: true,
+                    child: AvifAnimation(
+                      controller: _logoController,
+                      image: const AssetAvifImage('assets/images/logo.avif'),
+                      fit: BoxFit.contain,
+                      onLoaded: (duration, fps) {
+                        if (_logoPlayed || !mounted) return;
+                        _logoPlayed = true;
+                        _logoController
+                          ..duration = duration
+                          ..forward(from: 0);
+                      },
+                    ),
                   ),
                   const SizedBox(height: 20),
                   Card(
