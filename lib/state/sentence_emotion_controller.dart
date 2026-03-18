@@ -73,7 +73,6 @@ class SentenceEmotionController extends StateNotifier<SentenceEmotionState> {
       body: body,
       isClassifying: true,
       overallModelLabel: '',
-      overallEmotionConfidence: null,
       overallEmotionChunkCount: 0,
       overallDistribution: const {},
     );

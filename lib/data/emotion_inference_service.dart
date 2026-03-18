@@ -134,7 +134,6 @@ class EmotionInferenceService {
         modelLabel: '',
         confidence: 0,
         primaryEmotionId: null,
-        labelProbabilities: {},
         chunkCount: 0,
       );
     }

@@ -27,7 +27,6 @@ class SentenceEmotionOverlayText extends StatelessWidget {
     this.textStyle,
     this.strutStyle,
     this.textHeightBehavior = const TextHeightBehavior(
-      applyHeightToFirstAscent: true,
       applyHeightToLastDescent: true,
     ),
     this.contentPadding = EdgeInsets.zero,
@@ -107,7 +106,6 @@ class SentenceEmotionOverlayPainter extends CustomPainter {
     this.badgeVerticalOffset = 0,
     this.textScaler = TextScaler.noScaling,
     this.textHeightBehavior = const TextHeightBehavior(
-      applyHeightToFirstAscent: true,
       applyHeightToLastDescent: true,
     ),
   });
@@ -140,11 +138,9 @@ class SentenceEmotionOverlayPainter extends CustomPainter {
     final textPainter = TextPainter(
       text: TextSpan(text: text, style: textStyle),
       textDirection: textDirection,
-      textAlign: TextAlign.start,
       strutStyle: strutStyle,
       textScaler: textScaler,
       textHeightBehavior: textHeightBehavior,
-      textWidthBasis: TextWidthBasis.parent,
     )..layout(maxWidth: innerWidth);
 
     final mergedRanges = _mergedEmotionRanges();
