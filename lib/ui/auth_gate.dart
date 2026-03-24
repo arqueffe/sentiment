@@ -1,11 +1,9 @@
-import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:sentiment/state/auth_controller.dart';
 import 'package:sentiment/state/providers.dart';
-import 'package:sentiment/ui/unlock_screen.dart';
 import 'package:sentiment/ui/home_screen.dart';
 
 class AuthGate extends ConsumerStatefulWidget {
@@ -16,103 +14,62 @@ class AuthGate extends ConsumerStatefulWidget {
 }
 
 class _AuthGateState extends ConsumerState<AuthGate> {
-  static const _relockGracePeriod = Duration(seconds: 60);
+  static const _demoEncryptionKey = <int>[
+    0x9A,
+    0x4D,
+    0x6E,
+    0x21,
+    0x4F,
+    0x98,
+    0x10,
+    0xAD,
+    0x27,
+    0x31,
+    0x5B,
+    0xC0,
+    0x76,
+    0x18,
+    0xE3,
+    0x44,
+    0x55,
+    0x26,
+    0xB9,
+    0xAF,
+    0x39,
+    0xD4,
+    0x80,
+    0x11,
+    0x72,
+    0x63,
+    0xA8,
+    0xC7,
+    0x95,
+    0x0E,
+    0x14,
+    0x2B,
+  ];
 
   Future<void>? _openFuture;
-  DateTime? _backgroundedAt;
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(_lifecycleObserver);
-    super.dispose();
-  }
-
-  late final WidgetsBindingObserver _lifecycleObserver =
-      _AuthGateLifecycleObserver(onStateChanged: _onLifecycleChanged);
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(_lifecycleObserver);
-    Future<void>.microtask(
-      () => ref.read(authControllerProvider.notifier).initialize(),
-    );
-  }
-
-  void _onLifecycleChanged(AppLifecycleState state) {
-    final controller = ref.read(authControllerProvider.notifier);
-    final auth = ref.read(authControllerProvider);
-
-    switch (state) {
-      case AppLifecycleState.inactive:
-      case AppLifecycleState.paused:
-      case AppLifecycleState.hidden:
-        if (auth.status == AuthStatus.unlocked) {
-          _backgroundedAt ??= DateTime.now();
-        }
-        break;
-      case AppLifecycleState.resumed:
-        final backgroundedAt = _backgroundedAt;
-        _backgroundedAt = null;
-        if (backgroundedAt == null || auth.status != AuthStatus.unlocked) {
-          return;
-        }
-        final elapsed = DateTime.now().difference(backgroundedAt);
-        if (elapsed >= _relockGracePeriod) {
-          controller.lock();
-        }
-        break;
-      case AppLifecycleState.detached:
-        if (auth.status == AuthStatus.unlocked) {
-          controller.lock();
-        }
-        break;
-    }
+    final key = Uint8List.fromList(_demoEncryptionKey);
+    _openFuture = ref.read(entryRepositoryProvider).open(key);
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authControllerProvider);
-
-    switch (auth.status) {
-      case AuthStatus.loading:
-        return const Scaffold(body: Center(child: CircularProgressIndicator()));
-      case AuthStatus.locked:
-        if (_openFuture != null) {
-          _openFuture = null;
-          unawaited(ref.read(entryRepositoryProvider).close());
-        }
-        return const UnlockScreen();
-      case AuthStatus.unlocked:
-        final key = ref.read(authControllerProvider.notifier).masterKey;
-        if (key == null) {
+    return FutureBuilder<void>(
+      future: _openFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        _openFuture ??= ref.read(entryRepositoryProvider).open(key);
-        return FutureBuilder<void>(
-          future: _openFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
-            }
-            return const HomeScreen();
-          },
-        );
-    }
-  }
-}
-
-class _AuthGateLifecycleObserver extends WidgetsBindingObserver {
-  _AuthGateLifecycleObserver({required this.onStateChanged});
-
-  final void Function(AppLifecycleState state) onStateChanged;
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    onStateChanged(state);
+        return const HomeScreen();
+      },
+    );
   }
 }

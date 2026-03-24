@@ -1,12 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:dart_bert_tokenizer/dart_bert_tokenizer.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'package:sentiment/data/emotion_label_mapper.dart';
 
@@ -34,6 +33,8 @@ class EmotionInferenceService {
        _runtime = runtime ?? OnnxRuntime();
 
   static const String _modelAssetPath = 'assets/models/bert-emotion.onnx';
+  static const String _webModelAssetPath =
+      'assets/models/bert-emotion_web.onnx';
   static const String _vocabAssetPath = 'bert-emotion/vocab.txt';
   static const String _configAssetPath = 'bert-emotion/config.json';
   static const int _defaultMaxSequenceLength = 512;
@@ -77,30 +78,34 @@ class EmotionInferenceService {
       return;
     }
 
+    _log('initialize() started (isWeb: $kIsWeb)');
+
     final config = await _loadConfig();
     _maxSequenceLength = _resolveMaxSequenceLength(config);
     _labelOrder = _resolveLabelOrder(config);
-
-    final vocabFile = await _copyAssetToAppSupport(
-      _vocabAssetPath,
-      outputFileName: 'vocab.txt',
+    _log(
+      'config loaded (maxSequenceLength: $_maxSequenceLength, labels: ${_labelOrder.length})',
     );
-    final tokenizer = await WordPieceTokenizer.fromVocabFile(vocabFile.path);
+
+    final vocabContent = await rootBundle.loadString(_vocabAssetPath);
+    final vocab = Vocabulary.fromString(vocabContent);
+    _log('vocab loaded (size: ${vocab.size})');
+    final tokenizer = WordPieceTokenizer(vocab: vocab);
     tokenizer.enableTruncation(maxLength: _maxSequenceLength);
     tokenizer.enablePadding(length: _maxSequenceLength);
-    final entryChunkTokenizer = await WordPieceTokenizer.fromVocabFile(
-      vocabFile.path,
-    );
+    final entryChunkTokenizer = WordPieceTokenizer(vocab: vocab);
 
-    final modelFile = await _copyAssetToAppSupport(
-      _modelAssetPath,
-      outputFileName: 'bert-emotion.onnx',
-    );
-    final session = await _runtime.createSession(modelFile.path);
+    final OrtSession session;
+    if (kIsWeb) {
+      session = await _createWebSession();
+    } else {
+      session = await _runtime.createSessionFromAsset(_modelAssetPath);
+    }
 
     _tokenizer = tokenizer;
     _entryChunkTokenizer = entryChunkTokenizer;
     _session = session;
+    _log('initialize() completed successfully');
   }
 
   Future<EmotionPrediction> classifySentence(String sentence) async {
@@ -122,7 +127,8 @@ class EmotionInferenceService {
         return _neutralPrediction;
       }
       return _predictionFromProbabilities(probabilities);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      _logError('classifySentence() failed', error, stackTrace);
       return _neutralPrediction;
     }
   }
@@ -185,7 +191,8 @@ class EmotionInferenceService {
         labelProbabilities: basePrediction.labelProbabilities,
         chunkCount: validChunkCount,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      _logError('classifyEntry() failed', error, stackTrace);
       return _neutralPrediction;
     }
   }
@@ -303,6 +310,13 @@ class EmotionInferenceService {
         return const [];
       }
       return _softmax(logits);
+    } catch (error, stackTrace) {
+      _logError(
+        '_runInference() failed (tokenCount: ${tokenized.inputIds.length})',
+        error,
+        stackTrace,
+      );
+      rethrow;
     } finally {
       await inputIds?.dispose();
       await attentionMask?.dispose();
@@ -336,13 +350,13 @@ class EmotionInferenceService {
   _EmotionTokenizationResult _tokenize(String sentence) {
     final encoding = _tokenizer!.encode(sentence.trim());
     return _EmotionTokenizationResult(
-      inputIds: Int64List.fromList(
+      inputIds: Int32List.fromList(
         encoding.ids.map((value) => value.toInt()).toList(),
       ),
-      attentionMask: Int64List.fromList(
+      attentionMask: Int32List.fromList(
         encoding.attentionMask.map((value) => value.toInt()).toList(),
       ),
-      tokenTypeIds: Int64List.fromList(
+      tokenTypeIds: Int32List.fromList(
         encoding.typeIds.map((value) => value.toInt()).toList(),
       ),
     );
@@ -352,9 +366,51 @@ class EmotionInferenceService {
     try {
       final configRaw = await rootBundle.loadString(_configAssetPath);
       return jsonDecode(configRaw) as Map<String, dynamic>;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      _logError('_loadConfig() failed, using defaults', error, stackTrace);
       return const <String, dynamic>{};
     }
+  }
+
+  Future<OrtSession> _createWebSession() async {
+    final candidates = <String>[
+      // Canonical Flutter web asset URL for an asset key that already starts with `assets/`.
+      'assets/$_webModelAssetPath',
+      // Some static servers are configured from a different root and expose this path directly.
+      _webModelAssetPath,
+    ];
+
+    Object? lastError;
+    for (final candidate in candidates) {
+      try {
+        _log('trying web model URL: $candidate');
+        return await _runtime.createSession(candidate);
+      } catch (error, stackTrace) {
+        _logError(
+          'web session create failed for URL: $candidate',
+          error,
+          stackTrace,
+        );
+        lastError = error;
+      }
+    }
+    throw StateError('Unable to load web ONNX model: $lastError');
+  }
+
+  void _log(String message) {
+    if (!kDebugMode) {
+      return;
+    }
+    debugPrint('[EmotionInferenceService] $message');
+  }
+
+  void _logError(String message, Object error, StackTrace stackTrace) {
+    if (!kDebugMode) {
+      return;
+    }
+    debugPrint('[EmotionInferenceService] $message');
+    debugPrint('[EmotionInferenceService] error: $error');
+    debugPrint('[EmotionInferenceService] stackTrace: $stackTrace');
   }
 
   int _resolveMaxSequenceLength(Map<String, dynamic> config) {
@@ -373,38 +429,6 @@ class EmotionInferenceService {
     final sorted = idToLabel.entries.toList()
       ..sort((a, b) => int.parse(a.key).compareTo(int.parse(b.key)));
     return sorted.map((entry) => entry.value.toString()).toList();
-  }
-
-  Future<Directory> _assetCacheDirectory() async {
-    final appSupportDir = await getApplicationSupportDirectory();
-    final dir = Directory(
-      '${appSupportDir.path}${Platform.pathSeparator}bert_emotion_assets',
-    );
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    return dir;
-  }
-
-  Future<File> _copyAssetToAppSupport(
-    String assetPath, {
-    required String outputFileName,
-  }) async {
-    final cacheDir = await _assetCacheDirectory();
-    final file = File(
-      '${cacheDir.path}${Platform.pathSeparator}$outputFileName',
-    );
-    if (await file.exists()) {
-      return file;
-    }
-
-    final data = await rootBundle.load(assetPath);
-    final bytes = data.buffer.asUint8List(
-      data.offsetInBytes,
-      data.lengthInBytes,
-    );
-    await file.writeAsBytes(bytes, flush: true);
-    return file;
   }
 
   Future<void> dispose() async {
@@ -446,7 +470,7 @@ class _EmotionTokenizationResult {
     required this.tokenTypeIds,
   });
 
-  final Int64List inputIds;
-  final Int64List attentionMask;
-  final Int64List tokenTypeIds;
+  final Int32List inputIds;
+  final Int32List attentionMask;
+  final Int32List tokenTypeIds;
 }

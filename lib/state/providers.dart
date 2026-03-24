@@ -2,48 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:sentiment/data/auth_service.dart';
 import 'package:sentiment/data/emotion_inference_service.dart';
 import 'package:sentiment/data/emotion_label_mapper.dart';
-import 'package:sentiment/data/encryption_service.dart';
 import 'package:sentiment/data/entry_repository.dart';
-import 'package:sentiment/data/export_service.dart';
-import 'package:sentiment/state/auth_controller.dart';
 import 'package:sentiment/state/entry_controller.dart';
 import 'package:sentiment/state/sentence_emotion_controller.dart';
-
-final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
-  return const FlutterSecureStorage();
-});
-
-final encryptionServiceProvider = Provider<EncryptionService>((ref) {
-  return EncryptionService(storage: ref.watch(secureStorageProvider));
-});
-
-final localAuthProvider = Provider<LocalAuthentication>((ref) {
-  return LocalAuthentication();
-});
-
-final authServiceProvider = Provider<AuthService>((ref) {
-  return AuthService(
-    encryption: ref.watch(encryptionServiceProvider),
-    localAuth: ref.watch(localAuthProvider),
-    storage: ref.watch(secureStorageProvider),
-  );
-});
-
-final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
-  (ref) {
-    return AuthController(
-      authService: ref.watch(authServiceProvider),
-      encryptionService: ref.watch(encryptionServiceProvider),
-    );
-  },
-);
 
 final entryRepositoryProvider = Provider<EntryRepository>((ref) {
   return EntryRepository();
@@ -55,10 +20,6 @@ final entriesProvider = StreamProvider((ref) {
 
 final entryControllerProvider = Provider<EntryController>((ref) {
   return EntryController(ref.watch(entryRepositoryProvider));
-});
-
-final exportServiceProvider = Provider<ExportService>((ref) {
-  return ExportService();
 });
 
 final emotionLabelMapperProvider = Provider<EmotionLabelMapper>((ref) {

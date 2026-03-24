@@ -76,7 +76,7 @@ flutter:
   assets:
     - assets/images/logo.png
     - assets/images/logo.avif
-    - assets/models/bert-emotion.onnx
+    - assets/models/bert-emotion_web.onnx
     - bert-emotion/config.json
     - bert-emotion/special_tokens_map.json
     - bert-emotion/tokenizer_config.json
