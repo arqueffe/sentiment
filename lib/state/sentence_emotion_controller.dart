@@ -135,6 +135,7 @@ class SentenceEmotionController extends StateNotifier<SentenceEmotionState> {
           end: span.end,
           sentence: sentence,
           modelLabel: prediction.modelLabel,
+          detectedEmotionId: prediction.detectedEmotionId,
           primaryEmotionId: prediction.primaryEmotionId,
           confidence: prediction.confidence,
         ),
@@ -188,11 +189,12 @@ class SentenceEmotionController extends StateNotifier<SentenceEmotionState> {
       if (!_labelMapper.isCountable(annotation)) {
         continue;
       }
-      final primaryId = annotation.primaryEmotionId;
-      if (primaryId == null) {
+      final detectedId =
+          annotation.detectedEmotionId ?? annotation.primaryEmotionId;
+      if (detectedId == null) {
         continue;
       }
-      counts.update(primaryId, (value) => value + 1, ifAbsent: () => 1);
+      counts.update(detectedId, (value) => value + 1, ifAbsent: () => 1);
     }
     return counts;
   }
@@ -223,6 +225,7 @@ class SentenceEmotionController extends StateNotifier<SentenceEmotionState> {
       bucket.add(
         EmotionPrediction(
           modelLabel: annotation.modelLabel,
+          detectedEmotionId: annotation.detectedEmotionId,
           primaryEmotionId: annotation.primaryEmotionId,
           confidence: annotation.confidence,
         ),

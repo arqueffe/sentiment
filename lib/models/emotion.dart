@@ -475,6 +475,19 @@ class EmotionCatalog {
 
   static EmotionNode? byId(String id) => _byId[normalizeId(id)];
 
+  static String? primaryIdFor(String id) {
+    final normalizedId = normalizeId(id);
+    if (!_byId.containsKey(normalizedId)) {
+      return null;
+    }
+
+    var cursor = normalizedId;
+    while (_parentById[cursor] != null) {
+      cursor = _parentById[cursor]!;
+    }
+    return cursor;
+  }
+
   static List<String> pathLabels({
     required String primaryId,
     String? selectedId,

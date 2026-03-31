@@ -115,7 +115,8 @@ class EntryCard extends StatelessWidget {
   ) {
     final counts = <String, int>{};
     for (final annotation in annotations) {
-      final emotionId = annotation.primaryEmotionId;
+      final emotionId =
+          annotation.detectedEmotionId ?? annotation.primaryEmotionId;
       if (emotionId == null) {
         continue;
       }
@@ -138,6 +139,9 @@ class EntryCard extends StatelessWidget {
     if (dominantId == null) {
       return null;
     }
-    return EmotionSelection(primaryId: dominantId);
+
+    final primaryId = EmotionCatalog.primaryIdFor(dominantId) ?? dominantId;
+    final secondaryId = dominantId == primaryId ? null : dominantId;
+    return EmotionSelection(primaryId: primaryId, secondaryId: secondaryId);
   }
 }

@@ -212,7 +212,7 @@ class EntryDetailScreen extends ConsumerWidget {
   Map<String, int> _detectedEmotionCounts(JournalEntry entry) {
     final counts = <String, int>{};
     for (final annotation in entry.sentenceEmotionAnnotations) {
-      final id = annotation.primaryEmotionId;
+      final id = annotation.detectedEmotionId ?? annotation.primaryEmotionId;
       if (id == null) {
         continue;
       }

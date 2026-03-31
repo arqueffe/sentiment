@@ -14,6 +14,7 @@ class EmotionPrediction {
   const EmotionPrediction({
     required this.modelLabel,
     required this.confidence,
+    required this.detectedEmotionId,
     required this.primaryEmotionId,
     this.labelProbabilities = const {},
     this.chunkCount = 1,
@@ -21,6 +22,7 @@ class EmotionPrediction {
 
   final String modelLabel;
   final double confidence;
+  final String? detectedEmotionId;
   final String? primaryEmotionId;
   final Map<String, double> labelProbabilities;
   final int chunkCount;
@@ -37,10 +39,11 @@ class EmotionInferenceService {
   static const String _vocabAssetPath = 'bert-emotion/vocab.txt';
   static const String _configAssetPath = 'bert-emotion/config.json';
   static const int _defaultMaxSequenceLength = 512;
-  static const double _topEmotionMarginThreshold = 0.3;
+  static const double _topEmotionMarginThreshold = 0.2;
   static const EmotionPrediction _neutralPrediction = EmotionPrediction(
     modelLabel: EmotionLabelMapper.neutralLabel,
     confidence: 1,
+    detectedEmotionId: null,
     primaryEmotionId: null,
     labelProbabilities: {EmotionLabelMapper.neutralLabel: 1},
   );
@@ -134,6 +137,7 @@ class EmotionInferenceService {
       return const EmotionPrediction(
         modelLabel: '',
         confidence: 0,
+        detectedEmotionId: null,
         primaryEmotionId: null,
         chunkCount: 0,
       );
@@ -182,6 +186,7 @@ class EmotionInferenceService {
       return EmotionPrediction(
         modelLabel: basePrediction.modelLabel,
         confidence: basePrediction.confidence,
+        detectedEmotionId: basePrediction.detectedEmotionId,
         primaryEmotionId: basePrediction.primaryEmotionId,
         labelProbabilities: basePrediction.labelProbabilities,
         chunkCount: validChunkCount,
@@ -347,10 +352,12 @@ class EmotionInferenceService {
     final selectedConfidence = modelLabel == EmotionLabelMapper.neutralLabel
         ? (distribution[EmotionLabelMapper.neutralLabel] ?? topConfidence)
         : topConfidence;
+    final detectedEmotionId = _labelMapper.mapDetectedId(modelLabel);
 
     return EmotionPrediction(
       modelLabel: modelLabel,
       confidence: selectedConfidence,
+      detectedEmotionId: detectedEmotionId,
       primaryEmotionId: _labelMapper.mapPrimaryId(modelLabel),
       labelProbabilities: distribution,
     );

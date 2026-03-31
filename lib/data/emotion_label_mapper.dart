@@ -1,36 +1,45 @@
 import 'package:sentiment/models/entry.dart';
+import 'package:sentiment/models/emotion.dart';
 
 class EmotionLabelMapper {
   static const neutralLabel = 'neutral';
 
-  static const Map<String, String?> _modelToPrimary = {
+  static const Map<String, String?> _modelToDetected = {
     'sadness': 'sad',
     'anger': 'angry',
-    'love': 'happy',
+    'love': 'happy_peaceful_loving',
     'surprise': 'surprised',
     'fear': 'fearful',
     'happiness': 'happy',
     'neutral': null,
     'disgust': 'disgusted',
-    'shame': 'sad',
-    'guilt': 'sad',
-    'sarcasm': 'disgusted',
-    'excitement': 'happy',
-    'anxiety': 'fearful',
-    'confusion': 'surprised',
-    'desire': 'happy',
+    'shame': 'sad_guilty_ashamed',
+    'guilt': 'sad_guilty',
+    'sarcasm': 'angry_critical_dismissive',
+    'excitement': 'surprised_excited',
+    'anxiety': 'fearful_anxious',
+    'confusion': 'surprised_confused',
+    'desire': 'happy_interested',
   };
 
+  String? mapDetectedId(String modelLabel) {
+    final detectedId = _modelToDetected[_normalizeLabel(modelLabel)];
+    if (detectedId == null) {
+      return null;
+    }
+    return EmotionCatalog.byId(detectedId)?.id;
+  }
+
   String? mapPrimaryId(String modelLabel) {
-    return _modelToPrimary[_normalizeLabel(modelLabel)];
+    final detectedId = mapDetectedId(modelLabel);
+    if (detectedId == null) {
+      return null;
+    }
+    return EmotionCatalog.primaryIdFor(detectedId);
   }
 
   bool isCountable(SentenceEmotionAnnotation annotation) {
-    return !_isNeutral(annotation.modelLabel);
-  }
-
-  bool _isNeutral(String label) {
-    return _normalizeLabel(label) == neutralLabel;
+    return mapDetectedId(annotation.modelLabel) != null;
   }
 
   String _normalizeLabel(String modelLabel) {

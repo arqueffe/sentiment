@@ -47,7 +47,8 @@ InsightsMetrics buildInsightsMetrics(
     final post = entry.postMoodSelection?.primaryId;
     final detectedCounts = <String, int>{};
     for (final annotation in entry.sentenceEmotionAnnotations) {
-      final detected = annotation.primaryEmotionId;
+      final detected =
+          annotation.detectedEmotionId ?? annotation.primaryEmotionId;
       if (detected == null) {
         continue;
       }

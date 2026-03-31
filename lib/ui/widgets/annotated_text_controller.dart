@@ -66,6 +66,7 @@ class AnnotatedTextController extends TextEditingController {
       if (left[i].start != right[i].start ||
           left[i].end != right[i].end ||
           left[i].modelLabel != right[i].modelLabel ||
+          left[i].detectedEmotionId != right[i].detectedEmotionId ||
           left[i].primaryEmotionId != right[i].primaryEmotionId) {
         return false;
       }

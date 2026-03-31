@@ -30,6 +30,7 @@ class SentenceEmotionAnnotation {
     required this.sentence,
     required this.modelLabel,
     required this.confidence,
+    this.detectedEmotionId,
     this.primaryEmotionId,
   });
 
@@ -37,6 +38,7 @@ class SentenceEmotionAnnotation {
   final int end;
   final String sentence;
   final String modelLabel;
+  final String? detectedEmotionId;
   final String? primaryEmotionId;
   final double confidence;
 }
@@ -49,6 +51,7 @@ class SentenceEmotionAnnotationHive extends HiveObject {
     required this.sentence,
     required this.modelLabel,
     required this.confidence,
+    this.detectedEmotionId,
     this.primaryEmotionId,
   });
 
@@ -70,12 +73,16 @@ class SentenceEmotionAnnotationHive extends HiveObject {
   @HiveField(5)
   final double confidence;
 
+  @HiveField(6)
+  final String? detectedEmotionId;
+
   SentenceEmotionAnnotation toDomain() {
     return SentenceEmotionAnnotation(
       start: start,
       end: end,
       sentence: sentence,
       modelLabel: modelLabel,
+      detectedEmotionId: detectedEmotionId ?? primaryEmotionId,
       primaryEmotionId: primaryEmotionId,
       confidence: confidence,
     );
@@ -89,6 +96,7 @@ class SentenceEmotionAnnotationHive extends HiveObject {
       end: annotation.end,
       sentence: annotation.sentence,
       modelLabel: annotation.modelLabel,
+      detectedEmotionId: annotation.detectedEmotionId,
       primaryEmotionId: annotation.primaryEmotionId,
       confidence: annotation.confidence,
     );
@@ -179,7 +187,8 @@ class JournalEntry extends HiveObject {
       postMood: _moodFromJson(json['postMood'] as Map<String, dynamic>?),
       sentenceAnnotations:
           (json['sentenceAnnotations'] as List<dynamic>? ?? const [])
-              .map((item) => _annotationFromJson(item as Map<String, dynamic>))
+              .whereType<Map<String, dynamic>>()
+              .map(_annotationFromJson)
               .toList(),
     );
   }
@@ -209,6 +218,7 @@ class JournalEntry extends HiveObject {
       'end': annotation.end,
       'sentence': annotation.sentence,
       'modelLabel': annotation.modelLabel,
+      'detectedEmotionId': annotation.detectedEmotionId,
       'primaryEmotionId': annotation.primaryEmotionId,
       'confidence': annotation.confidence,
     };
@@ -222,6 +232,9 @@ class JournalEntry extends HiveObject {
       end: json['end'] as int,
       sentence: json['sentence'] as String,
       modelLabel: json['modelLabel'] as String,
+      detectedEmotionId:
+          (json['detectedEmotionId'] as String?) ??
+          (json['primaryEmotionId'] as String?),
       primaryEmotionId: json['primaryEmotionId'] as String?,
       confidence: (json['confidence'] as num).toDouble(),
     );
@@ -269,7 +282,8 @@ class JournalEntryAdapter extends TypeAdapter<JournalEntry> {
         ? (_tryRead(
                 reader,
                 () => (reader.read() as List)
-                    .cast<SentenceEmotionAnnotationHive>(),
+                    .whereType<SentenceEmotionAnnotationHive>()
+                    .toList(),
               ) ??
               const <SentenceEmotionAnnotationHive>[])
         : const <SentenceEmotionAnnotationHive>[];
@@ -324,11 +338,16 @@ class SentenceEmotionAnnotationAdapter
     final modelLabel = reader.readString();
     final primaryEmotionId = reader.readBool() ? reader.readString() : null;
     final confidence = reader.readDouble();
+    final hasDetectedEmotionId = _tryRead(reader, reader.readBool) ?? false;
+    final detectedEmotionId = hasDetectedEmotionId
+        ? _tryRead(reader, reader.readString)
+        : null;
     return SentenceEmotionAnnotationHive(
       start: start,
       end: end,
       sentence: sentence,
       modelLabel: modelLabel,
+      detectedEmotionId: detectedEmotionId ?? primaryEmotionId,
       primaryEmotionId: primaryEmotionId,
       confidence: confidence,
     );
@@ -345,5 +364,17 @@ class SentenceEmotionAnnotationAdapter
       writer.writeString(obj.primaryEmotionId!);
     }
     writer.writeDouble(obj.confidence);
+    writer.writeBool(obj.detectedEmotionId != null);
+    if (obj.detectedEmotionId != null) {
+      writer.writeString(obj.detectedEmotionId!);
+    }
+  }
+
+  T? _tryRead<T>(BinaryReader reader, T Function() fn) {
+    try {
+      return fn();
+    } catch (_) {
+      return null;
+    }
   }
 }

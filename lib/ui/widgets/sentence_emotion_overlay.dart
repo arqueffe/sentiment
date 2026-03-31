@@ -10,11 +10,22 @@ Map<String, Color> emotionColorById(
 ) {
   final colorByEmotionId = <String, Color>{};
   for (final annotation in annotations) {
-    final emotionId = annotation.primaryEmotionId;
-    if (emotionId == null || colorByEmotionId.containsKey(emotionId)) {
+    final detectedEmotionId =
+        annotation.detectedEmotionId ?? annotation.primaryEmotionId;
+    if (detectedEmotionId == null ||
+        colorByEmotionId.containsKey(detectedEmotionId)) {
       continue;
     }
-    colorByEmotionId[emotionId] = emotionColor(context, emotionId);
+    final primaryEmotionId =
+        annotation.primaryEmotionId ??
+        EmotionCatalog.primaryIdFor(detectedEmotionId);
+    if (primaryEmotionId == null) {
+      continue;
+    }
+    colorByEmotionId[detectedEmotionId] = emotionColor(
+      context,
+      primaryEmotionId,
+    );
   }
   return colorByEmotionId;
 }
@@ -230,7 +241,8 @@ class SentenceEmotionOverlayPainter extends CustomPainter {
     final merged = <_MergedEmotionRange>[];
 
     for (final annotation in sorted) {
-      final emotionId = annotation.primaryEmotionId;
+      final emotionId =
+          annotation.detectedEmotionId ?? annotation.primaryEmotionId;
       if (emotionId == null) {
         continue;
       }
@@ -305,6 +317,7 @@ class SentenceEmotionOverlayPainter extends CustomPainter {
       final previous = oldDelegate.annotations[i];
       if (current.start != previous.start ||
           current.end != previous.end ||
+          current.detectedEmotionId != previous.detectedEmotionId ||
           current.primaryEmotionId != previous.primaryEmotionId ||
           current.modelLabel != previous.modelLabel) {
         return true;
