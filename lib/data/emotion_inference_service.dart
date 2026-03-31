@@ -37,6 +37,7 @@ class EmotionInferenceService {
   static const String _vocabAssetPath = 'bert-emotion/vocab.txt';
   static const String _configAssetPath = 'bert-emotion/config.json';
   static const int _defaultMaxSequenceLength = 512;
+  static const double _topEmotionMarginThreshold = 0.3;
   static const EmotionPrediction _neutralPrediction = EmotionPrediction(
     modelLabel: EmotionLabelMapper.neutralLabel,
     confidence: 1,
@@ -319,15 +320,37 @@ class EmotionInferenceService {
     }
 
     final index = _argmax(probabilities);
-    final modelLabel = _labelOrder[index.clamp(0, _labelOrder.length - 1)];
+    var secondBest = double.negativeInfinity;
+    for (var i = 0; i < probabilities.length; i++) {
+      if (i == index) {
+        continue;
+      }
+      if (probabilities[i] > secondBest) {
+        secondBest = probabilities[i];
+      }
+    }
+
+    final topConfidence = probabilities[index];
+    final hasSecond = secondBest.isFinite;
+    final passesMargin =
+        hasSecond && (topConfidence - secondBest) > _topEmotionMarginThreshold;
+
+    final topModelLabel = _labelOrder[index.clamp(0, _labelOrder.length - 1)];
+    final modelLabel = passesMargin
+        ? topModelLabel
+        : EmotionLabelMapper.neutralLabel;
     final distribution = <String, double>{};
     for (var i = 0; i < probabilities.length && i < _labelOrder.length; i++) {
       distribution[_labelOrder[i]] = probabilities[i];
     }
 
+    final selectedConfidence = modelLabel == EmotionLabelMapper.neutralLabel
+        ? (distribution[EmotionLabelMapper.neutralLabel] ?? topConfidence)
+        : topConfidence;
+
     return EmotionPrediction(
       modelLabel: modelLabel,
-      confidence: probabilities[index],
+      confidence: selectedConfidence,
       primaryEmotionId: _labelMapper.mapPrimaryId(modelLabel),
       labelProbabilities: distribution,
     );

@@ -26,9 +26,7 @@ class SentenceEmotionOverlayText extends StatelessWidget {
     required this.annotations,
     this.textStyle,
     this.strutStyle,
-    this.textHeightBehavior = const TextHeightBehavior(
-      applyHeightToLastDescent: true,
-    ),
+    this.textHeightBehavior = const TextHeightBehavior(),
     this.contentPadding = EdgeInsets.zero,
     this.badgeVerticalOffset = 0,
   });
@@ -105,9 +103,7 @@ class SentenceEmotionOverlayPainter extends CustomPainter {
     this.strutStyle,
     this.badgeVerticalOffset = 0,
     this.textScaler = TextScaler.noScaling,
-    this.textHeightBehavior = const TextHeightBehavior(
-      applyHeightToLastDescent: true,
-    ),
+    this.textHeightBehavior = const TextHeightBehavior(),
   });
 
   final String text;
